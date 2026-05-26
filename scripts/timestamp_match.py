@@ -8,19 +8,21 @@ api_data_file = r"C:\Users\Tracy\Projects\Xi_EE_Pose\data\cleaned_data.csv"
 frame_file = r"C:\Users\Tracy\Projects\Xi_EE_Pose\data\video_stream_1_20260514_201037_timestamps.txt"
 output_file = r"C:\Users\Tracy\Projects\Xi_EE_Pose\data\synced_frame_api.csv"
 
-# INPUTS
+# USER INPUTS #
 
 # frame timezone offset from API time
 FRAME_TIMEZONE = 'America/Vancouver'
 
-
 # Maximum allowed time difference between frame and API sample
 MATCH_TOLERANCE = "50ms"
 
-# Which API signal to match
-SIGNAL_TO_MATCH = "ISI_TIP_TRANSFORM"
-
-
+# Which API field to match
+SIGNALS_TO_KEEP = [
+    "ISI_SUJ_JOINT_VALUES",
+    "ISI_JOINT_VALUES",
+    "ISI_TIP_POSITION",
+    "ISI_TIP_ROTATION",
+]
 
 frames = pd.read_csv(frame_file, header=None, names=["timestamp"])
 
@@ -32,179 +34,130 @@ frames["frame_time"] = (
         .dt.tz_convert("UTC")
     )
 
+frames = frames[["frame_id", "frame_time"]].sort_values("frame_time")
 print(frames["frame_time"].head())
 
-api = pd.read_csv(api_data_file, usecols=[0])
+# api = pd.read_csv(api_data_file, usecols=[0])
 
-# API timestamp has timezone
-# 2026-05-14T20:09:43.790054-07:00
-api["api_time"] = pd.to_datetime(api["system_timestamp"], utc=True)
+# # API timestamp has timezone
+# # 2026-05-14T20:09:43.790054-07:00
+# api["api_time"] = pd.to_datetime(api["system_timestamp"], utc=True)
 
-print(api["api_time"].head())
+# print(api["api_time"].head())
 
-# # =========================
-# # READ API DATA
-# # =========================
+api = pd.read_csv(api_data_file)
 
+# Clean column names just in case there are spaces
+api.columns = api.columns.str.strip()
 
+print("\nAPI columns:")
+print(api.columns.tolist())
 
-# # Clean manipulator ID
-# api["manipulator"] = api["manipulator"].astype(float).astype(int)
+TIME_COL = "system_timestamp"
+FIELD_COL = "field"
+MANIP_COL = "manip"
+DATA_COL = "data"
 
-# # Keep only the signal we care about
-# api_signal = api[api["signal"] == SIGNAL_TO_MATCH].copy()
+required_cols = [TIME_COL, FIELD_COL, MANIP_COL, DATA_COL]
 
+for col in required_cols:
+    if col not in api.columns:
+        raise ValueError(
+            f"Column '{col}' not found in cleaned_data.csv. "
+            f"Available columns are: {api.columns.tolist()}"
+        )
 
-# # =========================
-# # PARSE TRANSFORM VALUES
-# # =========================
+# Convert API timestamp to UTC
+api["api_time"] = pd.to_datetime(api[TIME_COL], utc=True)
 
-# def parse_transform(value_str):
-#     """
-#     Converts:
-#     "[r11 r12 r13 x r21 r22 r23 y r31 r32 r33 z]"
-#     into 12 floats.
-#     """
-#     value_str = str(value_str).strip()
-#     value_str = value_str.replace("[", "").replace("]", "")
-#     nums = [float(x) for x in value_str.split()]
+# Clean manipulator ID
+api[MANIP_COL] = pd.to_numeric(api[MANIP_COL], errors="coerce").astype("Int64")
 
-#     if len(nums) != 12:
-#         raise ValueError(f"Expected 12 values for transform, got {len(nums)}: {value_str}")
+# Keep only the signals you need
+api_filtered = api[api[FIELD_COL].isin(SIGNALS_TO_KEEP)].copy()
 
-#     return nums
+# Keep only useful columns for now.
+# The value column stays as the original string, e.g. "[0.1 0.2 0.3]"
+api_filtered = api_filtered[
+    [
+        TIME_COL,
+        "api_time",
+        FIELD_COL,
+        MANIP_COL,
+        DATA_COL,
+    ]
+].copy()
 
+api_filtered = api_filtered.sort_values("api_time")
 
-# transform_array = api_signal["value"].apply(parse_transform)
+print("\nFiltered API data:")
+print(api_filtered.head())
 
-# transform_df = pd.DataFrame(
-#     transform_array.to_list(),
-#     index=api_signal.index,
-#     columns=[
-#         "r11", "r12", "r13", "x",
-#         "r21", "r22", "r23", "y",
-#         "r31", "r32", "r33", "z"
-#     ]
-# )
+# =========================
+# MATCH API DATA TO FRAMES
+# =========================
 
-# api_signal = pd.concat([api_signal, transform_df], axis=1)
+all_matches = []
 
+# Match separately for each signal and manipulator
+for (field, manipulator), group in api_filtered.groupby([FIELD_COL, MANIP_COL]):
 
-# # =========================
-# # READ FRAME TIMESTAMPS
-# # =========================
+    group = group.sort_values("api_time").copy()
 
-# frames_raw = pd.read_csv(frame_file)
+    matched = pd.merge_asof(
+        frames.sort_values("frame_time"),
+        group.sort_values("api_time"),
+        left_on="frame_time",
+        right_on="api_time",
+        direction="nearest",
+        tolerance=pd.Timedelta(MATCH_TOLERANCE)
+    )
 
-# if "timestamp" in frames_raw.columns:
-#     frames = frames_raw.copy()
-# elif frames_raw.shape[1] == 1:
-#     frames = frames_raw.copy()
-#     frames.columns = ["timestamp"]
-# else:
-#     raise ValueError("frame_timestamps.csv should have either a 'timestamp' column or one timestamp column.")
+    # Add field/manipulator back explicitly.
+    # This is useful because unmatched rows may have NaN from merge_asof.
+    matched[FIELD_COL] = field
+    matched[MANIP_COL] = manipulator
 
-# # Add frame_id if it does not exist
-# if "frame_id" not in frames.columns:
-#     frames["frame_id"] = np.arange(1, len(frames) + 1)
+    matched["time_error_s"] = (
+        matched["frame_time"] - matched["api_time"]
+    ).dt.total_seconds().abs()
 
-# # Convert frame timestamps
-# if FRAME_TIMEZONE == "UTC":
-#     frames["frame_time"] = pd.to_datetime(frames["timestamp"], utc=True)
-# else:
-#     frames["frame_time"] = (
-#         pd.to_datetime(frames["timestamp"])
-#         .dt.tz_localize(FRAME_TIMEZONE)
-#         .dt.tz_convert("UTC")
-#     )
+    matched = matched.rename(columns={
+        TIME_COL: "api_timestamp_raw",
+        FIELD_COL: "field",
+        MANIP_COL: "manipulator",
+        DATA_COL: "data",
+    })
 
-# # Apply optional offset
+    matched = matched[
+        [
+            "frame_id",
+            "frame_time",
+            "field",
+            "manipulator",
+            "api_timestamp_raw",
+            "api_time",
+            "time_error_s",
+            "data",
+        ]
+    ]
 
+    all_matches.append(matched)
 
-# frames = frames[["frame_id", "frame_time"]].sort_values("frame_time").copy()
+synced = pd.concat(all_matches, ignore_index=True)
 
+# Optional: sort nicely
+synced = synced.sort_values(
+    ["frame_id", "manipulator", "field"]
+).reset_index(drop=True)
 
-# # =========================
-# # MATCH EACH FRAME TO API DATA
-# # =========================
+# =========================
+# SAVE RESULT
+# =========================
 
-# synced = frames.copy()
+synced.to_csv(output_file, index=False)
 
-# for manip_id in MANIPULATORS_TO_MATCH:
-#     manip_data = api_signal[api_signal["manipulator"] == manip_id].copy()
-#     manip_data = manip_data.sort_values("api_time")
+print(f"\nSaved synced data to:\n{output_file}")
+print("\nSynced output preview:")
+print(synced.head(20))
 
-#     if manip_data.empty:
-#         print(f"Warning: no {SIGNAL_TO_MATCH} data found for manipulator {manip_id}")
-#         continue
-
-#     matched = pd.merge_asof(
-#         frames.sort_values("frame_time"),
-#         manip_data[[
-#             "api_time",
-#             "r11", "r12", "r13", "x",
-#             "r21", "r22", "r23", "y",
-#             "r31", "r32", "r33", "z"
-#         ]],
-#         left_on="frame_time",
-#         right_on="api_time",
-#         direction="nearest",
-#         tolerance=pd.Timedelta(MATCH_TOLERANCE)
-#     )
-
-#     prefix = f"manip{manip_id}_"
-
-#     matched[prefix + "time_error_s"] = (
-#         matched["frame_time"] - matched["api_time"]
-#     ).dt.total_seconds().abs()
-
-#     matched = matched.rename(columns={
-#         "api_time": prefix + "api_time",
-#         "r11": prefix + "r11",
-#         "r12": prefix + "r12",
-#         "r13": prefix + "r13",
-#         "x": prefix + "x",
-#         "r21": prefix + "r21",
-#         "r22": prefix + "r22",
-#         "r23": prefix + "r23",
-#         "y": prefix + "y",
-#         "r31": prefix + "r31",
-#         "r32": prefix + "r32",
-#         "r33": prefix + "r33",
-#         "z": prefix + "z",
-#     })
-
-#     cols_to_add = [
-#         c for c in matched.columns
-#         if c.startswith(prefix)
-#     ]
-
-#     synced = synced.merge(
-#         matched[["frame_id"] + cols_to_add],
-#         on="frame_id",
-#         how="left"
-#     )
-
-
-# # =========================
-# # SAVE RESULT
-# # =========================
-
-# synced.to_csv(output_file, index=False)
-
-# print(f"Saved synced data to: {output_file}")
-# print()
-# print(synced.head())
-
-# # Print matching quality
-# for manip_id in MANIPULATORS_TO_MATCH:
-#     col = f"manip{manip_id}_time_error_s"
-#     if col in synced.columns:
-#         valid = synced[col].dropna()
-#         if len(valid) > 0:
-#             print(f"\nManipulator {manip_id}:")
-#             print(f"  matched frames: {len(valid)} / {len(synced)}")
-#             print(f"  mean time error: {valid.mean():.6f} s")
-#             print(f"  max time error:  {valid.max():.6f} s")
-#         else:
-#             print(f"\nManipulator {manip_id}: no valid matches")
