@@ -22,6 +22,7 @@ SIGNALS_TO_KEEP = [
     "ISI_JOINT_VALUES",
     "ISI_TIP_POSITION",
     "ISI_TIP_ROTATION",
+    "ISI_TIP_TRANSFORM"
 ]
 
 frames = pd.read_csv(frame_file, header=None, names=["timestamp"])
@@ -35,7 +36,7 @@ frames["frame_time"] = (
     )
 
 frames = frames[["frame_id", "frame_time"]].sort_values("frame_time")
-print(frames["frame_time"].head())
+print(frames[["frame_id"]].head(), frames["frame_time"].head())
 
 # api = pd.read_csv(api_data_file, usecols=[0])
 
@@ -73,11 +74,11 @@ api["api_time"] = pd.to_datetime(api[TIME_COL], utc=True)
 # Clean manipulator ID
 api[MANIP_COL] = pd.to_numeric(api[MANIP_COL], errors="coerce").astype("Int64")
 
-# Keep only the signals you need
+# Keep only the signals you need for FIELD_COL, starts a new dataframe
 api_filtered = api[api[FIELD_COL].isin(SIGNALS_TO_KEEP)].copy()
+print(api_filtered.head())
 
-# Keep only useful columns for now.
-# The value column stays as the original string, e.g. "[0.1 0.2 0.3]"
+# Keep only useful columns for now, in this order
 api_filtered = api_filtered[
     [
         TIME_COL,
@@ -88,6 +89,7 @@ api_filtered = api_filtered[
     ]
 ].copy()
 
+# order by time
 api_filtered = api_filtered.sort_values("api_time")
 
 print("\nFiltered API data:")
@@ -104,15 +106,19 @@ for (field, manipulator), group in api_filtered.groupby([FIELD_COL, MANIP_COL]):
 
     group = group.sort_values("api_time").copy()
 
+    # print(group.head())
+
+    #merge_asof left side controls output size. So we are 
     matched = pd.merge_asof(
         frames.sort_values("frame_time"),
         group.sort_values("api_time"),
         left_on="frame_time",
         right_on="api_time",
         direction="nearest",
-        tolerance=pd.Timedelta(MATCH_TOLERANCE)
+        tolerance=pd.Timedelta(MATCH_TOLERANCE) # calculate time difference
     )
 
+    # print(matched[["frame_id"]].head())
     # Add field/manipulator back explicitly.
     # This is useful because unmatched rows may have NaN from merge_asof.
     matched[FIELD_COL] = field
@@ -129,15 +135,15 @@ for (field, manipulator), group in api_filtered.groupby([FIELD_COL, MANIP_COL]):
         DATA_COL: "data",
     })
 
-    matched = matched[
+    matched = matched[  
         [
             "frame_id",
             "frame_time",
+            "api_time",
             "field",
             "manipulator",
-            "api_timestamp_raw",
-            "api_time",
-            "time_error_s",
+            # "api_timestamp_raw",
+            # "time_error_s",
             "data",
         ]
     ]
@@ -146,7 +152,7 @@ for (field, manipulator), group in api_filtered.groupby([FIELD_COL, MANIP_COL]):
 
 synced = pd.concat(all_matches, ignore_index=True)
 
-# Optional: sort nicely
+# sort and order everything here 
 synced = synced.sort_values(
     ["frame_id", "manipulator", "field"]
 ).reset_index(drop=True)
@@ -161,3 +167,8 @@ print(f"\nSaved synced data to:\n{output_file}")
 print("\nSynced output preview:")
 print(synced.head(20))
 
+for i in range(1, 1603):
+    if not synced[(synced["frame_id"] == i) & (synced["manipulator"] == 2) & (synced["field"] == "ISI_SUJ_JOINT_VALUES")].empty:
+        pass
+    else:
+        print(f"Frame {i} is missing manipulator 2 ISI_SUJ_JOINT_VALUES")
