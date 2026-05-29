@@ -2,14 +2,13 @@ from pathlib import Path
 import pandas as pd
 import numpy as np
 
-
+# Syncs API data to the video footage taken frame by frame
 
 api_data_file = r"C:\Users\Tracy\Projects\Xi_EE_Pose\data\cleaned_data.csv"
 frame_file = r"C:\Users\Tracy\Projects\Xi_EE_Pose\data\video_stream_1_20260514_201037_timestamps.txt"
 output_file = r"C:\Users\Tracy\Projects\Xi_EE_Pose\data\synced_frame_api.csv"
 
 # USER INPUTS #
-
 # frame timezone offset from API time
 FRAME_TIMEZONE = 'America/Vancouver'
 
@@ -27,7 +26,7 @@ SIGNALS_TO_KEEP = [
 
 frames = pd.read_csv(frame_file, header=None, names=["timestamp"])
 
-frames["frame_id"] = np.arange(1, len(frames) + 1)
+frames["frame_id"] = np.arange(0, len(frames))
 
 frames["frame_time"] = (
         pd.to_datetime(frames["timestamp"])
@@ -167,8 +166,8 @@ print(f"\nSaved synced data to:\n{output_file}")
 print("\nSynced output preview:")
 print(synced.head(20))
 
-for i in range(1, 1603):
-    if not synced[(synced["frame_id"] == i) & (synced["manipulator"] == 2) & (synced["field"] == "ISI_SUJ_JOINT_VALUES")].empty:
+for i in range(0, 1603):
+    if not synced[(synced["frame_id"] == i) & (synced["manipulator"] == 2) & (synced["field"] == "ISI_TIP_TRANSFORM")].empty:
         pass
     else:
-        print(f"Frame {i} is missing manipulator 2 ISI_SUJ_JOINT_VALUES")
+        print(f"Frame {i} is missing manipulator 2 ISI_TIP_TRANSFORM")

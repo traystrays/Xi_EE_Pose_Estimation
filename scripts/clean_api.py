@@ -1,6 +1,8 @@
 import pandas as pd
 from pathlib import Path
 
+# Deletes unwanted manipulator values
+
 # Change path for input and output files
 input_data = Path("C:\\Users\\Tracy\\Documents\\2026 RCL UBC\\xi_api_data 05142026\\api\\KinCsvLog_14-05-2026_20-09-43.699.csv")
 cleaned_data = Path("C:\\Users\\Tracy\\Projects\\Xi_EE_Pose\\data\\cleaned_data.csv")
