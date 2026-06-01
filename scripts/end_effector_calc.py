@@ -6,18 +6,22 @@ from scipy.io import loadmat
 
 video_path = r"C:\Users\Tracy\Documents\2026 RCL UBC\xi_api_data 05142026\endo_video\video_stream_1_20260514_201037.mp4"
 data_path = r"C:\Users\Tracy\Projects\Xi_EE_Pose\data\synced_frame_api.csv"
-left_K = r"C:\Users\Tracy\Documents\MATLAB\cam_left_K.mat"
-right_K = r"C:\Users\Tracy\Documents\MATLAB\cam_right_K.mat"
+left_K = r"C:\Users\Tracy\Documents\MATLAB\20260514_xi_data\cam_left_K.mat"
+right_K = r"C:\Users\Tracy\Documents\MATLAB\20260514_xi_data\cam_right_K.mat"
+hand_eye_calib_csv = Path(r"C:\Users\Tracy\Projects\Xi_EE_Pose\data\hand_eye_calib_data.csv")
+
+
 #=========== LOAD DATA ===========#
 
 left_K = loadmat(left_K)['K']
 print(left_K)
-right_K = loadmat(right_K)['K']
+
+right_K = loadmat(right_K)['K2']
 print(right_K)
 cap = cv2.VideoCapture(video_path)
 
 # fix later
-frame_id = 710
+frame_id = 1100
 if not cap.isOpened():
     print("Error opening video file")
 
@@ -56,9 +60,12 @@ def transform_to_matrix(transform_str):
 
 synced_data = pd.read_csv(data_path, usecols=["frame_id", "field", "manipulator", "data"])
 
-for i in range(510, 550):
+# start a list for p API
+p_API_list = []
+for i in range(0, 1600, 50):
     # filter for data of frame_id, manipulator 2, and field ISI_TIP_TRANSFORM
     frame_id = i
+    print(f"\nFrame ID: {frame_id}")
     frame_data = synced_data[(synced_data["frame_id"] == frame_id)]
 
 
@@ -83,16 +90,20 @@ for i in range(510, 550):
 
     # point in ECM frame
     p_ECM = PSM1_in_ECM @ p_G
-    # print("p_ECM:")
-    # print(p_ECM)
+    p_ECM = p_ECM[0:3]
+    p_API_list.append(f"[{p_ECM[0]:.6f} {p_ECM[1]:.6f} {p_ECM[2]:.6f}]")
+    print("p_ECM:")
+    print(p_ECM)
 
     u, v = project_2d(left_K, p_ECM)
-    print(u, v)
+    # print(u, v)
 
-
-cv2.imshow("Frame", frame)
-while True:
-    key = cv2.waitKey(0)
-    if key & 0xFF == 27:  # ESC key
-        break
-cv2.destroyAllWindows()
+df = pd.read_csv(hand_eye_calib_csv)
+df["p_API"] = p_API_list
+df.to_csv(hand_eye_calib_csv, index=False)
+# cv2.imshow("Frame", frame)
+# while True:
+#     key = cv2.waitKey(0)
+#     if key & 0xFF == 27:  # ESC key
+#         break
+# cv2.destroyAllWindows()
