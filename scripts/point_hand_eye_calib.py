@@ -176,17 +176,16 @@ if OUTPUT_CSV.exists():
         # triangulate expects 2xN arrays; here N=1
         p_4D = cv2.triangulatePoints(P_L, P_R, np.array([[uL], [vL]], dtype=np.float64), np.array([[uR], [vR]], dtype=np.float64))
 
-        # protect against degenerate solutions
+        # protect against degenerate solutions that is 0
         w = p_4D[3, 0]
         if abs(w) < 1e-12:
-            print(f"Degenerate triangulation for row {index}; appending empty value")
             p_CL_list.append("")
             continue
 
         p_3D = (p_4D[:3, 0] / w)
         print(f"3D point: {p_3D}")
 
-        # optional reprojection sanity check
+        # reprojection sanity check so we are not getting BS
         X_h = np.array([p_3D[0], p_3D[1], p_3D[2], 1.0], dtype=np.float64)
         xL_proj = P_L @ X_h
         xL_proj = (xL_proj[:2] / xL_proj[2])

@@ -62,6 +62,7 @@ synced_data = pd.read_csv(data_path, usecols=["frame_id", "field", "manipulator"
 
 # start a list for p API
 p_API_list = []
+p_2D_list = []
 for i in range(0, 1600, 50):
     # filter for data of frame_id, manipulator 2, and field ISI_TIP_TRANSFORM
     frame_id = i
@@ -73,13 +74,13 @@ for i in range(0, 1600, 50):
     PSM2_transform = frame_data.loc[(frame_data["manipulator"] == 1) & (frame_data["field"] == "ISI_TIP_TRANSFORM"), "data"].item()
     ECM_transform = frame_data.loc[(frame_data["manipulator"] == 2) & (frame_data["field"] == "ISI_TIP_TRANSFORM"), "data"].item()
 
+    # Hardcode the ECM position because it is NOT moving
+    ECM_transform = "[-0.00946542528 0.000198544934 0.0764139444 0.160584629 -0.127096385 0.978803575 0.902461052 -0.382696331 -0.197752804 0.399717778 0.915090442 0.0532469451]"
+
     PSM1_T = transform_to_matrix(PSM1_transform)
     PSM2_T = transform_to_matrix(PSM2_transform)
     ECM_T = transform_to_matrix(ECM_transform)
-
-    # print(PSM1_T)
-    # print(PSM2_T)
-    # print(ECM_T)
+    print("hello",ECM_T)
 
     # find inverse of base to cam to get cam to base
     inv_ECM_T = np.linalg.inv(ECM_T)
@@ -96,11 +97,16 @@ for i in range(0, 1600, 50):
     print(p_ECM)
 
     u, v = project_2d(left_K, p_ECM)
-    # print(u, v)
 
-df = pd.read_csv(hand_eye_calib_csv)
-df["p_API"] = p_API_list
-df.to_csv(hand_eye_calib_csv, index=False)
+    print(u, v)
+    p_2D_list.append(f"[{u:.6f} {v:.6f}]")
+
+# df = pd.read_csv(hand_eye_calib_csv)
+# df["p_API"] = p_API_list
+# df["p_2D"] = p_2D_list
+# df.to_csv(hand_eye_calib_csv, index=False)
+
+
 # cv2.imshow("Frame", frame)
 # while True:
 #     key = cv2.waitKey(0)
