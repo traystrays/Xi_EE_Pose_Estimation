@@ -10,6 +10,7 @@ left_K = r"C:\Users\Tracy\Documents\MATLAB\20260514_xi_data\cam_left_K.mat"
 right_K = r"C:\Users\Tracy\Documents\MATLAB\20260514_xi_data\cam_right_K.mat"
 hand_eye_calib_csv = Path(r"C:\Users\Tracy\Projects\Xi_EE_Pose\data\hand_eye_calib_data.csv")
 
+calib = np.load("point_hand_eye_calib_result.npz")
 
 #=========== LOAD DATA ===========#
 
@@ -29,8 +30,18 @@ cap.set(cv2.CAP_PROP_POS_FRAMES, frame_id)
 
 ret, frame = cap.read()
 
+print(frame.shape)
+
 if not ret:
     print(f"Error reading frame {frame_id}")
+
+calib = np.load("point_hand_eye_calib_result.npz")
+R, t = calib['R'], calib['t']
+print(R,t)
+CL_T_ECM = np.eye(4)
+CL_T_ECM[:3, :3] = R
+CL_T_ECM[:3, 3] = t.flatten()
+print(CL_T_ECM)
 
 #=============== funks ================#
 
@@ -39,11 +50,8 @@ def project_2d(K, point_3d):
     # divide to obtain 2D normalized coordinates
     x = point_3d[0] / point_3d[2]
     y = point_3d[1] / point_3d[2]
-    # apply intrinsic matrix parameters 
-    # print( "u", x, K[0,0], x * K[0, 0], K[0, 2])
-    # print( "v", y, K[1,1], y * K[1, 1], K[1, 2])
-    print("z", point_3d[2])
 
+    # apply intrinsic matrix parameters 
     u = K[0, 0] * x + K[0, 2]
     v = K[1, 1] * y + K[1, 2]
     return u, v
@@ -63,6 +71,7 @@ synced_data = pd.read_csv(data_path, usecols=["frame_id", "field", "manipulator"
 # start a list for p API
 p_API_list = []
 p_2D_list = []
+np.set_printoptions(suppress=True, precision=8)
 for i in range(0, 1600, 50):
     # filter for data of frame_id, manipulator 2, and field ISI_TIP_TRANSFORM
     frame_id = i
@@ -80,26 +89,36 @@ for i in range(0, 1600, 50):
     PSM1_T = transform_to_matrix(PSM1_transform)
     PSM2_T = transform_to_matrix(PSM2_transform)
     ECM_T = transform_to_matrix(ECM_transform)
-    print("hello",ECM_T)
 
-    # find inverse of base to cam to get cam to base
+    # find inverse of base to ECM to get ECM to base
     inv_ECM_T = np.linalg.inv(ECM_T)
-    # get PSM1 in cam frame
-    PSM1_in_ECM = inv_ECM_T @ PSM1_T
+    # get PSM2 in cam frame
 
-    p_G = np.array([0, 0, 0, 1]) # origin in PSM1 frame
+    print(PSM2_T)
+    PSM2_in_ECM = inv_ECM_T @ PSM2_T
 
-    # point in ECM frame
-    p_ECM = PSM1_in_ECM @ p_G
-    p_ECM = p_ECM[0:3]
-    p_API_list.append(f"[{p_ECM[0]:.6f} {p_ECM[1]:.6f} {p_ECM[2]:.6f}]")
-    print("p_ECM:")
-    print(p_ECM)
+    print(PSM2_in_ECM)
+    PSM2_in_CL = CL_T_ECM @ PSM2_in_ECM
+    print(PSM2_in_CL)
 
-    u, v = project_2d(left_K, p_ECM)
+    p_G = np.array([0, 0, 0, 1]) # origin in PSM2 frame
+
+    # point in camera frame in the end
+    p_CAM = PSM2_in_CL @ p_G
+
+    print(p_CAM)
+
+    # select the first 3 elements, last element is 1 anyways
+    p_CAM = p_CAM[0:3]
+    p_API_list.append(f"[{p_CAM[0]:.6f} {p_CAM[1]:.6f} {p_CAM[2]:.6f}]")
+    # print("p_CAM:")
+    # print(p_CAM)
+
+    u, v = project_2d(left_K, p_CAM)
 
     print(u, v)
     p_2D_list.append(f"[{u:.6f} {v:.6f}]")
+
 
 # df = pd.read_csv(hand_eye_calib_csv)
 # df["p_API"] = p_API_list

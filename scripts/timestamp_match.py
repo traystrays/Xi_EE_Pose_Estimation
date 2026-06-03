@@ -141,7 +141,7 @@ for (field, manipulator), group in api_filtered.groupby([FIELD_COL, MANIP_COL]):
             "api_time",
             "field",
             "manipulator",
-            # "api_timestamp_raw",
+            "api_timestamp_raw",
             # "time_error_s",
             "data",
         ]

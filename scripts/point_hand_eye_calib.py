@@ -203,5 +203,64 @@ if OUTPUT_CSV.exists():
 else:
     print(f"Output CSV {OUTPUT_CSV} not found; skipping triangulation")
 
+# select sources and targets 
+sources = pd.read_csv(OUTPUT_CSV, usecols=["p_API"])["p_API"].tolist()
+targets = pd.read_csv(OUTPUT_CSV, usecols=["p_CL"])["p_CL"].tolist()
+
+sources_list = []
+targets_list = []
+skipped_frames = []
+
+# stack all source and targets into (N,3) matrices 
+for i in range(len(sources)):
+    sources[i] = np.fromstring(sources[i].strip("[]").replace(",", " "), sep=" ").reshape(1, 3)
+    targets[i] = np.fromstring(targets[i].strip("[]").replace(",", " "), sep=" ").reshape(1, 3)
+
+    # remove nan values in both source and target 
+    if np.isnan(sources[i]).any() or np.isnan(targets[i]).any():
+        skipped_frames.append(i)
+        continue
+    sources_list.append(sources[i])
+    targets_list.append(targets[i])
+
+print (skipped_frames)
+
+def least_square(X, Y):
+    # using umeyama method to find least square
+    # input (m,n) numpy array whee m is dimension of points (3) and n is number of points (N)
+    # Estimates c, R, and t such that Y = c * R * X + t, c = 1.0 here because 
+
+    # finds the average position of each point in space
+    mu_x = X.mean(axis = 1, keepdims=True)
+    mu_y = Y.mean(axis = 1, keepdims=True)
+
+    # print(mu_x.shape)
+    # print(mu_y.shape)  
+    print (X.shape[1])
+    var_xy =np.square(X - mu_x).sum(axis=0).mean() # variance of points in source, one number
+
+    # cross 
+    cov_xy = ((Y - mu_y) @ (X - mu_x).T) / X.shape[1] # cross covariance between source and target, a matrix (mxm) 
+    U, D, VH = np.linalg.svd(cov_xy)
+    S = np.eye(X.shape[0])
+    if np.linalg.det(U) * np.linalg.det(VH) < 0:
+        S[-1, -1] = -1
+    c = 1.0
+    R = U @ S @ VH
+    t = mu_y - c * R @ mu_x
+    return c, R, t
+
+source_N3 = np.vstack(sources_list)
+target_N3 = np.vstack(targets_list)
+print(source_N3) # (N,3)
+print(target_N3) # (N,3)
+print(source_N3.T) # (3,N)
+print(target_N3.T) #(3,N)
+
+c, R, t = least_square(source_N3.T, target_N3.T)
+
+print(R,t)
+
+np.savez("point_hand_eye_calib_result.npz", R=R, t=t)
 
 
