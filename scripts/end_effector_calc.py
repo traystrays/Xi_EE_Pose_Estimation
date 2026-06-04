@@ -9,6 +9,7 @@ data_path = r"C:\Users\Tracy\Projects\Xi_EE_Pose\data\synced_frame_api.csv"
 left_K = r"C:\Users\Tracy\Documents\MATLAB\20260514_xi_data\cam_left_K.mat"
 right_K = r"C:\Users\Tracy\Documents\MATLAB\20260514_xi_data\cam_right_K.mat"
 hand_eye_calib_csv = Path(r"C:\Users\Tracy\Projects\Xi_EE_Pose\data\hand_eye_calib_data.csv")
+full_2D_csv = Path(r"C:\Users\Tracy\Projects\Xi_EE_Pose\data\full_2D_projection.csv")
 
 calib = np.load("point_hand_eye_calib_result.npz")
 
@@ -72,7 +73,7 @@ synced_data = pd.read_csv(data_path, usecols=["frame_id", "field", "manipulator"
 p_API_list = []
 p_2D_list = []
 np.set_printoptions(suppress=True, precision=8)
-for i in range(0, 1600, 50):
+for i in range(0, 1600, 1):
     # filter for data of frame_id, manipulator 2, and field ISI_TIP_TRANSFORM
     frame_id = i
     print(f"\nFrame ID: {frame_id}")
@@ -84,6 +85,7 @@ for i in range(0, 1600, 50):
     ECM_transform = frame_data.loc[(frame_data["manipulator"] == 2) & (frame_data["field"] == "ISI_TIP_TRANSFORM"), "data"].item()
 
     # Hardcode the ECM position because it is NOT moving
+    # ok this should not be done this way
     ECM_transform = "[-0.00946542528 0.000198544934 0.0764139444 0.160584629 -0.127096385 0.978803575 0.902461052 -0.382696331 -0.197752804 0.399717778 0.915090442 0.0532469451]"
 
     PSM1_T = transform_to_matrix(PSM1_transform)
@@ -94,19 +96,23 @@ for i in range(0, 1600, 50):
     inv_ECM_T = np.linalg.inv(ECM_T)
     # get PSM2 in cam frame
 
-    print(PSM2_T)
+    # print(PSM2_T)
+
+    # print("multiplied by inverse ECM_T same for everything:")
+    # print(inv_ECM_T)
+
     PSM2_in_ECM = inv_ECM_T @ PSM2_T
 
-    print(PSM2_in_ECM)
+    # print(PSM2_in_ECM)
     PSM2_in_CL = CL_T_ECM @ PSM2_in_ECM
-    print(PSM2_in_CL)
+    # print(PSM2_in_CL)
 
     p_G = np.array([0, 0, 0, 1]) # origin in PSM2 frame
 
     # point in camera frame in the end
     p_CAM = PSM2_in_CL @ p_G
 
-    print(p_CAM)
+    # print(p_CAM)
 
     # select the first 3 elements, last element is 1 anyways
     p_CAM = p_CAM[0:3]
@@ -122,8 +128,9 @@ for i in range(0, 1600, 50):
 
 # df = pd.read_csv(hand_eye_calib_csv)
 # df["p_API"] = p_API_list
-# df["p_2D"] = p_2D_list
-# df.to_csv(hand_eye_calib_csv, index=False)
+df = pd.DataFrame()
+df["p_2D"] = p_2D_list
+df.to_csv(full_2D_csv, index=False)
 
 
 # cv2.imshow("Frame", frame)

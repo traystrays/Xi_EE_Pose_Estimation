@@ -164,7 +164,7 @@ synced.to_csv(output_file, index=False)
 
 print(f"\nSaved synced data to:\n{output_file}")
 print("\nSynced output preview:")
-print(synced.head(20))
+print(synced.head(20))  
 
 for i in range(0, 1603):
     if not synced[(synced["frame_id"] == i) & (synced["manipulator"] == 2) & (synced["field"] == "ISI_TIP_TRANSFORM")].empty:

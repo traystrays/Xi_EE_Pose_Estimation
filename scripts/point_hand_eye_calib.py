@@ -3,11 +3,13 @@ import cv2
 import pandas as pd
 from scipy.io import loadmat
 import numpy as np
-import datetime
+import sys
+
 
 LEFT_VIDEO = Path(r"C:\Users\Tracy\Documents\2026 RCL UBC\xi_api_data 05142026\endo_video\video_stream_1_20260514_201037.mp4")
 RIGHT_VIDEO = Path(r"C:\Users\Tracy\Documents\2026 RCL UBC\xi_api_data 05142026\endo_video\video_stream_2_20260514_201037.mp4")
 OUTPUT_CSV = Path(r"C:\Users\Tracy\Projects\Xi_EE_Pose\data\hand_eye_calib_data.csv")
+OUTPUT_CSV_2 = Path(r"C:\Users\Tracy\Projects\Xi_EE_Pose\data\hand_eye_calib_data_2.csv")
 
 R_right = Path(r"C:\Users\Tracy\Documents\MATLAB\20260514_xi_data\R_cam2.mat")
 t_right = Path(r"C:\Users\Tracy\Documents\MATLAB\20260514_xi_data\t_cam2.mat")
@@ -57,16 +59,16 @@ def mouse_callback(event, x, y, flags, param):
 EMPTY = True
 
 # checking to see if output csv already exists and is populated with data
-if OUTPUT_CSV.exists():
-    if OUTPUT_CSV.stat().st_size <=5: # file is empty or only has header
-        print(f"Output CSV {OUTPUT_CSV} exists but is empty. Starting fresh.")
+if OUTPUT_CSV_2.exists():
+    if OUTPUT_CSV_2.stat().st_size <=5: # file is empty or only has header
+        print(f"Output CSV {OUTPUT_CSV_2} exists but is empty. Starting fresh.")
     else:
         EMPTY = False
-        print(f"Output CSV {OUTPUT_CSV} already exists. Loading existing data.")
+        print(f"Output CSV {OUTPUT_CSV_2} already exists. Loading existing data.")
 
 if EMPTY:
-    print(f"parsing through data and saving to {OUTPUT_CSV}...")
-    for i in range (0, 1600, 50):
+    print(f"parsing through data and saving to {OUTPUT_CSV_2}...")
+    for i in range (25, 1600, 50):
         frame_id = i
         left_frame = get_frame(LEFT_VIDEO, frame_id)
         right_frame = get_frame(RIGHT_VIDEO, frame_id)
@@ -147,10 +149,11 @@ if EMPTY:
                 raise SystemExit
 
         cv2.destroyWindow(window_name)
-    pd.DataFrame(clicks).to_csv(OUTPUT_CSV, index=False)
+    pd.DataFrame(clicks).to_csv(OUTPUT_CSV_2, index=False)
     print(f"Saved labels to {OUTPUT_CSV}")
 
 cv2.destroyAllWindows()
+sys.exit()
 
 
 R = loadmat(R_right)['R_cam2']
