@@ -13,6 +13,7 @@ full_2D_csv = Path(r"C:\Users\Tracy\Projects\Xi_EE_Pose\data\full_2D_projection.
 
 calib = np.load("point_hand_eye_calib_result.npz")
 
+random_csv = Path(r"D:\DataVGH\dvapi\KinCsvLog_09-09-2025_17-58-42.368.csv")
 #=========== LOAD DATA ===========#
 
 left_K = loadmat(left_K)['K']
@@ -73,33 +74,47 @@ synced_data = pd.read_csv(data_path, usecols=["frame_id", "field", "manipulator"
 p_API_list = []
 p_2D_list = []
 np.set_printoptions(suppress=True, precision=8)
-for i in range(0, 1600, 1):
+
+
+for i in range(0, 1602, 1):
     # filter for data of frame_id, manipulator 2, and field ISI_TIP_TRANSFORM
     frame_id = i
     print(f"\nFrame ID: {frame_id}")
     frame_data = synced_data[(synced_data["frame_id"] == frame_id)]
 
-
     PSM1_transform = frame_data.loc[(frame_data["manipulator"] == 0) & (frame_data["field"] == "ISI_TIP_TRANSFORM"), "data"].item()
-    PSM2_transform = frame_data.loc[(frame_data["manipulator"] == 1) & (frame_data["field"] == "ISI_TIP_TRANSFORM"), "data"].item()
-    ECM_transform = frame_data.loc[(frame_data["manipulator"] == 2) & (frame_data["field"] == "ISI_TIP_TRANSFORM"), "data"].item()
+    PSM2_transform = frame_data.loc[(frame_data["manipulator"] == 2) & (frame_data["field"] == "ISI_TIP_TRANSFORM"), "data"].item()
+    ECM_transform = frame_data.loc[(frame_data["manipulator"] == 1) & (frame_data["field"] == "ISI_TIP_TRANSFORM"), "data"].item()
 
+    # print(PSM2_transform)
     # Hardcode the ECM position because it is NOT moving
     # ok this should not be done this way
-    ECM_transform = "[-0.00946542528 0.000198544934 0.0764139444 0.160584629 -0.127096385 0.978803575 0.902461052 -0.382696331 -0.197752804 0.399717778 0.915090442 0.0532469451]"
+    ECM_transform = "[0.00616765767 -0.114661247 -0.947188497 -0.965364158 0.188586876 0.180290669 0.205659389 0.975258708 0.0810634494 -0.160542935 0.115335025 -0.980266452]"
 
     PSM1_T = transform_to_matrix(PSM1_transform)
     PSM2_T = transform_to_matrix(PSM2_transform)
     ECM_T = transform_to_matrix(ECM_transform)
 
+    # If any element is NaN or exact integer zero, set the entire transform to zeros and skip
+    if np.isnan(ECM_T).any():
+        print(f"Frame {frame_id}: ECM_T contains NaN or zero; skipping frame")
+        p_API_list.append("[0 0 0]")
+        p_2D_list.append("[0 0]")
+        continue
+
     # find inverse of base to ECM to get ECM to base
-    inv_ECM_T = np.linalg.inv(ECM_T)
+    try:
+        inv_ECM_T = np.linalg.inv(ECM_T)
+    except np.linalg.LinAlgError:
+        print(f"Frame {frame_id}: ECM_T is singular and cannot be inverted; skipping frame")
+        p_API_list.append("[0 0 0]")
+        p_2D_list.append("[0 0]")
+        continue
     # get PSM2 in cam frame
 
-    # print(PSM2_T)
 
-    # print("multiplied by inverse ECM_T same for everything:")
-    # print(inv_ECM_T)
+    print("multiplied by inverse ECM_T same for everything:")
+    print(inv_ECM_T)
 
     PSM2_in_ECM = inv_ECM_T @ PSM2_T
 
@@ -127,10 +142,14 @@ for i in range(0, 1600, 1):
 
 
 # df = pd.read_csv(hand_eye_calib_csv)
-# df["p_API"] = p_API_list
+
+
 df = pd.DataFrame()
 df["p_2D"] = p_2D_list
 df.to_csv(full_2D_csv, index=False)
+full_API_csv = Path(r"C:\Users\Tracy\Projects\Xi_EE_Pose\data\full_API_projection.csv")
+df["p_API"] = p_API_list
+df.to_csv(full_API_csv, index=False)
 
 
 # cv2.imshow("Frame", frame)

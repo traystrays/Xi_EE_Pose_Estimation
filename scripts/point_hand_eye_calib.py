@@ -4,6 +4,7 @@ import pandas as pd
 from scipy.io import loadmat
 import numpy as np
 import sys
+import re
 
 
 LEFT_VIDEO = Path(r"C:\Users\Tracy\Documents\2026 RCL UBC\xi_api_data 05142026\endo_video\video_stream_1_20260514_201037.mp4")
@@ -207,26 +208,56 @@ else:
     print(f"Output CSV {OUTPUT_CSV} not found; skipping triangulation")
 
 # select sources and targets 
-sources = pd.read_csv(OUTPUT_CSV, usecols=["p_API"])["p_API"].tolist()
-targets = pd.read_csv(OUTPUT_CSV, usecols=["p_CL"])["p_CL"].tolist()
+sources = pd.read_csv(OUTPUT_CSV, usecols=["p_API"])['p_API'].tolist()
+targets = pd.read_csv(OUTPUT_CSV, usecols=["p_CL"])['p_CL'].tolist()
+
+def parse_vector_field(s):
+    """Parse a string like '[x y z]' into a (1,3) numpy array.
+    Returns None if parsing fails or values contain NaN.
+    """
+    if pd.isna(s):
+        return None
+    if isinstance(s, (float, int)):
+        return None
+    # extract numeric tokens
+    toks = re.findall(r"[-+]?[0-9]*\.?[0-9]+(?:[eE][-+]?[0-9]+)?", str(s))
+    if len(toks) < 3:
+        return None
+    try:
+        vals = np.array([float(toks[0]), float(toks[1]), float(toks[2])], dtype=np.float64)
+    except Exception:
+        return None
+    if np.isnan(vals).any():
+        return None
+    return vals.reshape(1, 3)
 
 sources_list = []
 targets_list = []
 skipped_frames = []
+bad_reasons = {}
 
-# stack all source and targets into (N,3) matrices 
 for i in range(len(sources)):
-    sources[i] = np.fromstring(sources[i].strip("[]").replace(",", " "), sep=" ").reshape(1, 3)
-    targets[i] = np.fromstring(targets[i].strip("[]").replace(",", " "), sep=" ").reshape(1, 3)
-
-    # remove nan values in both source and target 
-    if np.isnan(sources[i]).any() or np.isnan(targets[i]).any():
+    s_raw = sources[i]
+    t_raw = targets[i]
+    s_parsed = parse_vector_field(s_raw)
+    t_parsed = parse_vector_field(t_raw)
+    if s_parsed is None or t_parsed is None:
         skipped_frames.append(i)
+        reason = []
+        if s_parsed is None:
+            reason.append('source')
+        if t_parsed is None:
+            reason.append('target')
+        bad_reasons[i] = ','.join(reason)
         continue
-    sources_list.append(sources[i])
-    targets_list.append(targets[i])
+    sources_list.append(s_parsed)
+    targets_list.append(t_parsed)
 
-print (skipped_frames)
+print('Skipped frames:', skipped_frames)
+if bad_reasons:
+    print('Skip reasons (index: reason):')
+    for k, v in list(bad_reasons.items())[:10]:
+        print(k, v)
 
 def least_square(X, Y):
     # using umeyama method to find least square
