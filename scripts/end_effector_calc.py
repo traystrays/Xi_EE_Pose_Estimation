@@ -45,6 +45,8 @@ CL_T_ECM[:3, :3] = R
 CL_T_ECM[:3, 3] = t.flatten()
 print(CL_T_ECM)
 
+exit
+
 #=============== funks ================#
 
 # take 3D point and project on to 2D

@@ -8,8 +8,8 @@ import pandas as pd
 
 
 DEFAULT_VIDEO = Path(r"C:\Users\Tracy\Documents\2026 RCL UBC\xi_api_data 05142026\endo_video\video_stream_1_20260514_201037.mp4")
-DEFAULT_CSV = Path(r"C:\Users\Tracy\Projects\Xi_EE_Pose\data\full_2D_projection.csv")
-DEFAULT_OUTPUT = Path(r"C:\Users\Tracy\Projects\Xi_EE_Pose\data\video_stream_with_dot.mp4")
+DEFAULT_CSV = Path(r"C:\Users\Tracy\Projects\Xi_EE_Pose\data\xi_data_0514\full_2D_projection.csv")
+DEFAULT_OUTPUT = Path(r"C:\Users\Tracy\Projects\Xi_EE_Pose\video_stream_with_dot.mp4")
 
 
 def parse_2d_point(value):
@@ -97,7 +97,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Overlay 2D projected points on a video.")
     parser.add_argument("--video", type=Path, default=DEFAULT_VIDEO, help="Path to the input video file")
     parser.add_argument("--csv", type=Path, default=DEFAULT_CSV, help="Path to the CSV file with p_2D points")
-    parser.add_argument("--output", type=Path, default=None, help="Optional output video file path")
+    parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT, help="Output video file path")
     return parser.parse_args()
 
 
@@ -106,6 +106,7 @@ def main():
     points = load_points(args.csv)
     print(f"Loaded {len(points)} points from {args.csv}")
     print(f"Opening video {args.video}")
+    print(f"Saving output video to {args.output}")
     draw_over_video(args.video, points, args.output)
 
 

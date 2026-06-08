@@ -1,0 +1,5 @@
+# Ignore generated video output files
+video_stream_with_dot.mp4
+
+# Optional: ignore all local MP4 exports if you want
+# *.mp4
