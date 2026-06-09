@@ -8,7 +8,7 @@ from scipy.io import loadmat
 # Paths
 Si_Data = Path(r"C:\Users\Tracy\Documents\2026 RCL UBC\si_data_06052026\data_local_part_1_5_6_2026_13_28_44.csv")
 Left_cam_timestamp = Path(r"C:\Users\Tracy\Projects\Xi_EE_Pose\data\si_data_0605\video_stream_1_20260605_132941_timestamps.txt")
-Output_Data = Path(r"C:\Users\Tracy\Projects\Xi_EE_Pose\data\si_data_0605\hand_eye_calibration_data.csv")
+Output_Data = Path(r"C:\Users\Tracy\Projects\Xi_EE_Pose\data\si_data_0605")
 
 left_video = Path(r"C:\Users\Tracy\Documents\2026 RCL UBC\si_data_06052026\video_stream_1_20260605_132941.mp4")
 left_output_dir = Path(r"C:\Users\Tracy\Projects\Xi_EE_Pose\checkerboard_images\left")
@@ -74,7 +74,8 @@ def sync_si_data_with_video():
     print(matched.head())
 
     output_df = matched[["frame_id", "frame_time", "ECM_pos_x", "ECM_pos_y", "ECM_pos_z"]]
-    output_df.to_csv(Output_Data, index=False)
+    hand_eye_output = Output_Data / f"hand_eye_calibration_data.csv"
+    output_df.to_csv(hand_eye_output, index=False)
 
     # 3D MATPLOT LIB CODE BELOW
 
@@ -118,21 +119,253 @@ def select_frames():
         cap.release()
         cv2.imwrite(right_output_dir / f"frame_{i}_right.jpg", frame)
 
-def checkerboard_inner_corners(column, row, square_size):
+def checkerboard_inner_corners(columns, rows, square_size):
     # Defines checkerboard pattern based on given pattern and square size
     # Columns and rows are INNER CORNERS
-    objp = np.zeros((row*column, 3), np.float32)
+    # square_size in mm
+    objp = np.zeros((rows*columns, 3), np.float32)
+    objp[:, :2] = np.mgrid[0:columns, 0:rows].T.reshape(-1, 2)
+    objp *= square_size
+
+    return objp
+
+def detect_checkerboard_keypoints(image, pattern_size):
+    # detect refined locations for corners
+
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+
+    flags = (
+        cv2.CALIB_CB_ADAPTIVE_THRESH
+        + cv2.CALIB_CB_NORMALIZE_IMAGE
+        + cv2.CALIB_CB_FAST_CHECK
+    )
+
+    found, corners = cv2.findChessboardCorners(gray, pattern_size, flags)
+
+    if not found:
+        return None
+
+    # Refine keypoints to sub-pixel accuracy
+    # stops refinind ghwne it reaches 30 iterations or improvement is smaller than 0.001 pixels
+    criteria = (
+        cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER,
+        30,
+        0.001
+    )
+
+    corners_refined = cv2.cornerSubPix(
+        gray,
+        corners, # list of corners
+        winSize=(11, 11), # total 11 x 11 pixels
+        zeroZone=(-1, -1),
+        criteria=criteria
+    )
+
+    return corners_refined
+
+def estimate_checkerboard_pose(image, object_points, K, dist_coeffs, pattern_size):
+
+
+    # detect key points
+    image_points = detect_checkerboard_keypoints(image, pattern_size)
+
+    if image_points is None:
+        return None
+
+    success, rvec, tvec = cv2.solvePnP(
+        object_points,
+        image_points,
+        K,
+        dist_coeffs,
+        flags=cv2.SOLVEPNP_ITERATIVE
+    )
+
+    if not success:
+        return None
+
+    R, _ = cv2.Rodrigues(rvec)
+
+    T_cam_board = np.eye(4)
+    T_cam_board[:3, :3] = R
+    T_cam_board[:3, 3] = tvec.flatten()
+
+    return T_cam_board, rvec, tvec, image_points
 
 
 # reproject back onto the image and see if the handeye calibration is correct
-def checkerboard_position():
-    left_K = loadmat(left_K_path)['K']
-    print(left_K.dtype)
+def B_matrix():
+
+    # obtain and save the B-matrices part of the classic AX = XB 
+    # hand-eye calibration problem. 
+    ## INPUTS 
+    pattern_size = (7,6) # columns, rows of INNER corners
+    square_size_mm = 15 # 15mm
+
+    object_points = (checkerboard_inner_corners(7, 6, square_size_mm))
+
+    left_K = loadmat(left_K_path)['K'].astype(np.float64)
+    # print(left_K.dtype)
+
+    image_folder = Path(r"C:\Users\Tracy\Projects\Xi_EE_Pose\checkerboard_images\left")
+
+    img_output_folder = Path(r"C:\Users\Tracy\Projects\Xi_EE_Pose\checkerboard_images\checkerboard_pose_result")
+    img_output_folder.mkdir(parents=True, exist_ok=True)
+
+    # ======== Replace with your real distortion coefficients if you have them.
+    # For example: np.array([k1, k2, 0, 0, 0], dtype=np.float64)
+    dist_coeffs = np.zeros((5, 1), dtype=np.float64)
+
+    pose_results = []
+
+    for i in range(0, 5984, 100):
+        image_path = image_folder / f"frame_{i}_left.jpg"
+
+        if not image_path.exists():
+            print(f"Image does not exist: {image_path}")
+            continue
+
+        image = cv2.imread(str(image_path))
+
+        if image is None:
+            print(f"Could not load image: {image_path}")
+            continue
+
+        result = estimate_checkerboard_pose(
+            image=image,
+            object_points=object_points,
+            K=left_K,
+            dist_coeffs=dist_coeffs,
+            pattern_size=pattern_size
+        )
+
+        if result is None:
+            print(f"Checkerboard not detected in frame {i}")
+            continue
+
+        T_cam_board, rvec, tvec, corners = result
+
+        pose_results.append({
+            "frame_id": i,
+            "T_cam_board": T_cam_board,
+            "rvec": rvec,
+            "tvec": tvec
+        })
+
+        # Optional: save image with detected corners drawn
+        image_with_corners = image.copy()
+
+        cv2.drawChessboardCorners(
+            image_with_corners,
+            pattern_size,
+            corners,
+            True
+        )
+
+        corner_output_path = img_output_folder / f"frame_{i}_left_corners.jpg"
+        cv2.imwrite(str(corner_output_path), image_with_corners)
+
+        print(f"Detected checkerboard pose in frame {i}")
+        print("tvec:")
+        print(tvec.flatten())
+
+    if len(pose_results) < 2:
+        print("Not enough valid checkerboard poses to compute B matrices.")
+        return None
 
 
+    # Compute B components for AX = XB
+    B_matrices = []
+    B_records = []
+
+    for k in range(len(pose_results) - 1):
+        frame_i = pose_results[k]["frame_id"]
+        frame_j = pose_results[k + 1]["frame_id"]
+
+        T_cam_board_i = pose_results[k]["T_cam_board"]
+        T_cam_board_j = pose_results[k + 1]["T_cam_board"]
+
+        # This convention matches:
+        # A_ij = inv(T_base_tool_i) @ T_base_tool_j
+        # B_ij = T_cam_board_i @ inv(T_cam_board_j)
+        B_ij = T_cam_board_i @ np.linalg.inv(T_cam_board_j)
+
+        B_matrices.append(B_ij)
+
+        record = {
+            "from_frame": frame_i,
+            "to_frame": frame_j,
+        }
+
+        for r in range(4):
+            for c in range(4):
+                record[f"B{r}{c}"] = B_ij[r, c]
+
+        B_records.append(record)
+
+    B_matrices = np.array(B_matrices)
+
+    # -----------------------------
+    # Save outputs
+    # -----------------------------
+    B_npy_path = Output_Data / "B_matrices.npy"
+    np.save(B_npy_path, B_matrices)
+
+    B_csv_path = Output_Data / "B_matrices.csv"
+    B_df = pd.DataFrame(B_records)
+    B_df.to_csv(B_csv_path, index=False)
+
+    # print("Saved B matrices to:")
+    # print(B_npy_path)
+    # print(B_csv_path)
+
+    print("B_matrices shape:")
+    print(B_matrices.shape)
+    print(B_matrices)
+
+    return B_matrices  
+
+def build_translation_
+def A_matrix():
+
+    robot = pd.read_csv(Output_Data / "hand_eye_calibration_data.csv", usecols=["frame_id", "ECM_pos_x", "ECM_pos_y", "ECM_pos_z"]) 
+    camera = pd.read_csv(Output_Data / "B_matrices.csv", usecols=["from_frame", "to_frame"]).reset_index(drop=True)
+
+    for idx, row in camera.iterrows():
+
+        i = int(row["from_frame"])
+        j= int(row["to_frame"])
+
+        r_from = robot[robot["frame_id"] == i]
+        r_to = 
+        if r_from.empty:
+            # missing -> skip
+            print(i, "is empty")
+            continue
+        robot_i_pos = r_from.iloc[0][["ECM_pos_x","ECM_pos_y","ECM_pos_z"]].to_numpy(dtype=np.float64)
+
+        print(i, robot_i_pos)
+
+        # # lookup robot rows for these frames
+        # r_from = robot[robot["frame_id"] == from_frame]
+        # r_to = robot[robot["frame_id"] == to_frame]
+
+        # if r_from.empty or r_to.empty:
+        #     print(f"Missing robot data for frames {from_frame} or {to_frame}; skipping")
+        #     continue
+
+        # # Access row values (first match)
+        # from_vals = r_from.iloc[0][["ECM_pos_x", "ECM_pos_y", "ECM_pos_z"]].to_numpy(dtype=np.float64)
+        # to_vals = r_to.iloc[0][["ECM_pos_x", "ECM_pos_y", "ECM_pos_z"]].to_numpy(dtype=np.float64)
+
+        # # TODO: compute A matrix components using from_vals and to_vals
+        # # (placeholder) print the vectors
+        # print("from_vals:", from_vals, "to_vals:", to_vals)
+
+    return
 
 if __name__ == "__main__":
-    checkerboard_position()
+    # B_matrix()
+    A_matrix()
 
 
 
