@@ -132,14 +132,16 @@ for i in range(0, 1602, 1):
 
     # print(PSM2_in_ECM)
     PSM2_in_CL = CL_T_ECM @ PSM2_in_ECM
-    # print(PSM2_in_CL)
+    print(PSM2_in_CL)
+
+    ##### UNDO FROM BELOW #####
 
     p_G = np.array([0, 0, 0, 1]) # origin in PSM2 frame
 
     # point in camera frame in the end
     p_CAM = PSM2_in_CL @ p_G
 
-    # print(p_CAM)
+    print(p_CAM)
 
     # select the first 3 elements, last element is 1 anyways
     p_CAM = p_CAM[0:3]
