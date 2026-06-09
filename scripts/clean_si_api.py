@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import cv2
 from scipy.io import loadmat
+import re
 
 # Paths
 Si_Data = Path(r"C:\Users\Tracy\Documents\2026 RCL UBC\si_data_06052026\data_local_part_1_5_6_2026_13_28_44.csv")
@@ -51,11 +52,23 @@ def sync_si_data_with_video():
     ecm_start = df.columns.get_loc(ARM)
 
     # The next three columns are ECM pos x, pos y, pos z
-    ecm_pos = df.iloc[:, ecm_start + 1 : ecm_start + 4].copy()
+    ecm_pos = df.iloc[:, ecm_start + 1 : ecm_start + 13].copy()
+
     ecm_pos.insert(0, "timestamp", si_timestamp)
 
     # Rename them so they are clear
-    ecm_pos.columns = ["timestamp", "ECM_pos_x", "ECM_pos_y", "ECM_pos_z"]
+    ecm_pos.columns = [
+            "timestamp", "pos x","pos y","pos z",
+            "o0",
+            "o1",
+            "o2",
+            "o3",
+            "o4",
+            "o5",
+            "o6",
+            "o7",
+            "o8"
+        ]
     ecm_pos = ecm_pos.sort_values("timestamp")
     # print(ecm_pos.head())
 
@@ -73,8 +86,38 @@ def sync_si_data_with_video():
 
     print(matched.head())
 
-    output_df = matched[["frame_id", "frame_time", "ECM_pos_x", "ECM_pos_y", "ECM_pos_z"]]
-    hand_eye_output = Output_Data / f"hand_eye_calibration_data.csv"
+    # Build transform matrices from matched rows when rotation (o0..o8) and position (pos x,y,z) exist
+    transform_matrices = []
+    for idx, row in matched.iterrows():
+        try:
+            t = np.array([row["pos x"], row["pos y"], row["pos z"]], dtype=float)
+            R = np.array([
+                [row["o0"], row["o1"], row["o2"]],
+                [row["o3"], row["o4"], row["o5"]],
+                [row["o6"], row["o7"], row["o8"]],
+            ], dtype=float)
+
+            if np.isnan(t).any() or np.isnan(R).any():
+                transform_matrices.append(np.full((4, 4), np.nan, dtype=float))
+                continue
+
+            T = np.eye(4, dtype=float)
+            T[:3, :3] = R
+            T[:3, 3] = t
+
+            transform_matrices.append(T)
+
+        except KeyError:
+            transform_matrices.append(np.full((4, 4), np.nan, dtype=float))
+        except Exception as e:
+            print(f"Error parsing row {idx}: {e}")
+            transform_matrices.append(np.full((4, 4), np.nan, dtype=float))
+
+    matched = matched.copy()
+    matched["Transform"] = transform_matrices
+
+    hand_eye_output = Output_Data / "hand_eye_calibration_data.csv"
+    output_df = matched[["frame_id", "frame_time", "Transform"]]
     output_df.to_csv(hand_eye_output, index=False)
 
     # 3D MATPLOT LIB CODE BELOW
@@ -304,9 +347,8 @@ def B_matrix():
 
     B_matrices = np.array(B_matrices)
 
-    # -----------------------------
+
     # Save outputs
-    # -----------------------------
     B_npy_path = Output_Data / "B_matrices.npy"
     np.save(B_npy_path, B_matrices)
 
@@ -324,48 +366,131 @@ def B_matrix():
 
     return B_matrices  
 
-def build_translation_
 def A_matrix():
 
-    robot = pd.read_csv(Output_Data / "hand_eye_calibration_data.csv", usecols=["frame_id", "ECM_pos_x", "ECM_pos_y", "ECM_pos_z"]) 
+    def parse_transform_string(transform_str):
+        if not isinstance(transform_str, str):
+            raise ValueError("Transform value is not a string")
+
+        flat = transform_str.replace("\n", " ")
+        nums = re.findall(r"-?\d+\.?\d*(?:[eE][+-]?\d+)?", flat)
+        data = np.array([float(x) for x in nums], dtype=np.float64)
+
+        if data.size == 16:
+            return data.reshape(4, 4)
+        if data.size == 12:
+            T = np.eye(4, dtype=np.float64)
+            T[:3, :4] = data.reshape(3, 4)
+            return T
+
+        raise ValueError(f"Transform string must contain 12 or 16 numbers; found {data.size}")
+
+    robot = pd.read_csv(
+        Output_Data / "hand_eye_calibration_data.csv",
+        usecols=["frame_id", "Transform"],
+    )
     camera = pd.read_csv(Output_Data / "B_matrices.csv", usecols=["from_frame", "to_frame"]).reset_index(drop=True)
 
-    for idx, row in camera.iterrows():
+    A_matrices = []
+    A_records = []
 
+    for idx, row in camera.iterrows():
         i = int(row["from_frame"])
-        j= int(row["to_frame"])
+        j = int(row["to_frame"])
 
         r_from = robot[robot["frame_id"] == i]
-        r_to = 
-        if r_from.empty:
-            # missing -> skip
-            print(i, "is empty")
+        r_to = robot[robot["frame_id"] == j]
+
+        if r_from.empty or r_to.empty:
+            print(f"Missing robot transform for frame {i} or {j}; skipping")
             continue
-        robot_i_pos = r_from.iloc[0][["ECM_pos_x","ECM_pos_y","ECM_pos_z"]].to_numpy(dtype=np.float64)
 
-        print(i, robot_i_pos)
+        try:
+            robot_i_T = parse_transform_string(r_from.iloc[0]["Transform"])
+            robot_j_T = parse_transform_string(r_to.iloc[0]["Transform"])
 
-        # # lookup robot rows for these frames
-        # r_from = robot[robot["frame_id"] == from_frame]
-        # r_to = robot[robot["frame_id"] == to_frame]
+        except Exception as e:
+            print(f"Skipping frame pair {i}->{j} due to parse error: {e}")
+            continue
 
-        # if r_from.empty or r_to.empty:
-        #     print(f"Missing robot data for frames {from_frame} or {to_frame}; skipping")
+        try:
+            A_ij = np.linalg.inv(robot_i_T) @ robot_j_T
+            print(A_ij)
+        except np.linalg.LinAlgError as e:
+            print(f"Cannot invert robot transform for frame {i}: {e}")
+            continue
+
+        A_matrices.append(A_ij)
+
+        record = {"from_frame": i, "to_frame": j}
+        for r in range(4):
+            for c in range(4):
+                record[f"A{r}{c}"] = A_ij[r, c]
+        A_records.append(record)
+
+        print(f"Computed A matrix for frames {i}->{j}")
+
+    if len(A_matrices) == 0:
+        print("No A matrices were computed.")
+        return None
+
+    A_matrices = np.array(A_matrices)
+
+    A_npy_path = Output_Data / "A_matrices.npy"
+    np.save(A_npy_path, A_matrices)
+
+    A_csv_path = Output_Data / "A_matrices.csv"
+    A_df = pd.DataFrame(A_records)
+    A_df.to_csv(A_csv_path, index=False)
+
+    print("A_matrices shape:", A_matrices.shape)
+    return A_matrices
+
+        # robot_i_vals = r_from.iloc[0][transform_cols].to_numpy(dtype=np.float64)
+        # robot_j_vals = r_to.iloc[0][transform_cols].to_numpy(dtype=np.float64)
+
+        # robot_i_T = robot_i_vals.reshape(4, 4)
+        # robot_j_T = robot_j_vals.reshape(4, 4)
+
+        # try:
+        #     A_ij = np.linalg.inv(robot_i_T) @ robot_j_T
+        # except np.linalg.LinAlgError as e:
+        #     print(f"Cannot invert robot transform for frame {i}: {e}")
         #     continue
 
-        # # Access row values (first match)
-        # from_vals = r_from.iloc[0][["ECM_pos_x", "ECM_pos_y", "ECM_pos_z"]].to_numpy(dtype=np.float64)
-        # to_vals = r_to.iloc[0][["ECM_pos_x", "ECM_pos_y", "ECM_pos_z"]].to_numpy(dtype=np.float64)
+        # A_matrices.append(A_ij)
 
-        # # TODO: compute A matrix components using from_vals and to_vals
-        # # (placeholder) print the vectors
-        # print("from_vals:", from_vals, "to_vals:", to_vals)
+        # record = {
+        #     "from_frame": i,
+        #     "to_frame": j,
+    #     }
+    #     for r in range(4):
+    #         for c in range(4):
+    #             record[f"A{r}{c}"] = A_ij[r, c]
+    #     A_records.append(record)
 
-    return
+    #     print(f"Computed A matrix for frames {i}->{j}")
+
+    # if len(A_matrices) == 0:
+    #     print("No A matrices were computed.")
+    #     return None
+
+    # A_matrices = np.array(A_matrices)
+
+    # A_npy_path = Output_Data / "A_matrices.npy"
+    # np.save(A_npy_path, A_matrices)
+
+    # A_csv_path = Output_Data / "A_matrices.csv"
+    # A_df = pd.DataFrame(A_records)
+    # A_df.to_csv(A_csv_path, index=False)
+
+    # print("A_matrices shape:", A_matrices.shape)
+    # return A_matrices
 
 if __name__ == "__main__":
-    # B_matrix()
+    #  B_matrix()
     A_matrix()
+    # sync_si_data_with_video()
 
 
 

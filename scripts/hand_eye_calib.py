@@ -7,4 +7,6 @@ import numpy as np
 # to find the hand-eye calibration between between ECM and camera
 
 # Using data from Si first, then go to OR to collect data on Xi
+A = 
+# Assmeble A & B Matrix 
 
