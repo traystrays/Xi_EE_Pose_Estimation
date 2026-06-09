@@ -5,15 +5,16 @@ import numpy as np
 from scipy.io import loadmat
 
 video_path = r"C:\Users\Tracy\Documents\2026 RCL UBC\xi_api_data 05142026\endo_video\video_stream_1_20260514_201037.mp4"
-data_path = r"C:\Users\Tracy\Projects\Xi_EE_Pose\data\synced_frame_api.csv"
+data_path = r"C:\Users\Tracy\Projects\Xi_EE_Pose\data\xi_data_0514\synced_frame_api.csv"
 left_K = r"C:\Users\Tracy\Documents\MATLAB\20260514_xi_data\cam_left_K.mat"
 right_K = r"C:\Users\Tracy\Documents\MATLAB\20260514_xi_data\cam_right_K.mat"
-hand_eye_calib_csv = Path(r"C:\Users\Tracy\Projects\Xi_EE_Pose\data\hand_eye_calib_data.csv")
-full_2D_csv = Path(r"C:\Users\Tracy\Projects\Xi_EE_Pose\data\full_2D_projection.csv")
+hand_eye_calib_csv = Path(r"C:\Users\Tracy\Projects\Xi_EE_Pose\data\xi_data_0514\hand_eye_calib_data.csv")
+full_2D_csv = Path(r"C:\Users\Tracy\Projects\Xi_EE_Pose\data\xi_data_0514\full_2D_projection.csv")
 
 calib = np.load("point_hand_eye_calib_result.npz")
 
 random_csv = Path(r"D:\DataVGH\dvapi\KinCsvLog_09-09-2025_17-58-42.368.csv")
+
 #=========== LOAD DATA ===========#
 
 left_K = loadmat(left_K)['K']
@@ -38,14 +39,24 @@ if not ret:
     print(f"Error reading frame {frame_id}")
 
 calib = np.load("point_hand_eye_calib_result.npz")
-R, t = calib['R'], calib['t']
-print(R,t)
+R_X, t_X = calib['R'], calib['t']
+print(R_X,t_X)
 CL_T_ECM = np.eye(4)
-CL_T_ECM[:3, :3] = R
-CL_T_ECM[:3, 3] = t.flatten()
+CL_T_ECM[:3, :3] = R_X
+CL_T_ECM[:3, 3] = t_X.flatten()
+
+# NEW Matrix
+
+CL_T_ECM[:3, :3] = [
+    [-0.5171981859, -0.8558511633, 0.0049822532],
+    [0.8536669857, -0.5154437886, 0.0746349669],
+    [-0.0613083518, 0.0428542545, 0.9971984752],
+]
+
+CL_T_ECM[:3, 3] = [-87.3955663331, 8.1365055571, 148.7597741708]
 print(CL_T_ECM)
 
-# exit
+# exit()
 
 #=============== funks ================#
 
@@ -89,9 +100,8 @@ for i in range(0, 1602, 1):
     ECM_transform = frame_data.loc[(frame_data["manipulator"] == 1) & (frame_data["field"] == "ISI_TIP_TRANSFORM"), "data"].item()
 
     # print(PSM2_transform)
-    # Hardcode the ECM position because it is NOT moving
-    # ok this should not be done this way
-    ECM_transform = "[0.00616765767 -0.114661247 -0.947188497 -0.965364158 0.188586876 0.180290669 0.205659389 0.975258708 0.0810634494 -0.160542935 0.115335025 -0.980266452]"
+    # Hardcode the ECM position because it is NOT moving, but there are many error messages
+    ECM_transform = "[0.00616765767, -0.114661247, -0.947188497, -0.965364158, 0.188586876, 0.180290669, 0.205659389, 0.97525870, 0.0810634494, -0.160542935, 0.115335025, -0.980266452]"
 
     PSM1_T = transform_to_matrix(PSM1_transform)
     PSM2_T = transform_to_matrix(PSM2_transform)
