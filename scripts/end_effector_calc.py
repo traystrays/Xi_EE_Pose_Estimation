@@ -45,7 +45,7 @@ CL_T_ECM[:3, :3] = R
 CL_T_ECM[:3, 3] = t.flatten()
 print(CL_T_ECM)
 
-exit
+# exit
 
 #=============== funks ================#
 
