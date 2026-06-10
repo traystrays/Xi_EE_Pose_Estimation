@@ -255,8 +255,8 @@ def B_matrix():
     img_output_folder.mkdir(parents=True, exist_ok=True)
 
     # ======== Replace with your real distortion coefficients if you have them.
-    # For example: np.array([k1, k2, 0, 0, 0], dtype=np.float64)
-    dist_coeffs = np.zeros((5, 1), dtype=np.float64)
+
+    dist_coeffs = np.array([-2.008552794758558e-06, -3.925424424248872e-12, 0, 0, 0], dtype=np.float64)
 
     pose_results = []
 
@@ -488,7 +488,7 @@ def A_matrix():
     # return A_matrices
 
 if __name__ == "__main__":
-    #  B_matrix()
+    B_matrix()
     A_matrix()
     # sync_si_data_with_video()
 

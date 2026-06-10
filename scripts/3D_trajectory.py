@@ -17,9 +17,10 @@ import matplotlib.pyplot as plt
 
 data_path_1 = Path(r"C:\Users\Tracy\Projects\Xi_EE_Pose\data\full_API_projection.csv")
 data_path_2 = Path(r"C:\Users\Tracy\Projects\Xi_EE_Pose\data\xi_data_0514\full_API+3D_projection.csv")
+data_path_3 = Path(r"C:\Users\Tracy\Projects\Xi_EE_Pose\data\OLDRx_full_API_projection.csv")
 
 NEW_3D = pd.read_csv(data_path_1, usecols=["p_API"])
-OLD_3D = pd.read_csv(data_path_2, usecols=["p_API"])
+OLD_3D = pd.read_csv(data_path_3, usecols=["p_API"])
 OG_3D = pd.read_csv(data_path_2, usecols=["p_OG"])
 
 full_API_csv = Path(r"C:\Users\Tracy\Projects\Xi_EE_Pose\data\full_API_projection.csv")
@@ -59,12 +60,43 @@ print(f"Calc_API_Tip: {len(x1)} points")
 print(f"OLD_3D: {len(x2)} points")
 print(f"OG_3D: {len(x3)} points")
 
+# Create color arrays: dark green (1.0) to light green (0.0)
+colors1 = np.linspace(1, 0, len(x1)) if len(x1) > 0 else np.array([])
+colors2 = np.linspace(1, 0, len(x2)) if len(x2) > 0 else np.array([])
+colors3 = np.linspace(1, 0, len(x3)) if len(x3) > 0 else np.array([])
+
+def mark_start_finish(ax, x, y, z, name):
+    """
+    Mark start point blue and finish point red.
+    """
+    if len(x) == 0:
+        return
+
+    # Start point: blue
+    ax.scatter(
+        x[0], y[0], z[0],
+        c="blue",
+        s=80,
+        marker="o",
+        label=f"{name} start"
+    )
+
+    # Finish point: red
+    ax.scatter(
+        x[-1], y[-1], z[-1],
+        c="red",
+        s=80,
+        marker="X",
+        label=f"{name} finish"
+    )
+
 # Create 3 subplots in a 1x3 grid
 fig = plt.figure(figsize=(18, 5))
 
 # Plot 1: Calc_API_Tip (NEW)
 ax1 = fig.add_subplot(131, projection='3d')
-ax1.scatter(x1, y1, z1, c=range(len(x1)), cmap='viridis', s=10, label='Calc API Tip')
+ax1.scatter(x1, y1, z1, c=colors1, cmap='Greens', s=10, label='Calc API Tip')
+mark_start_finish(ax1, x1, y1, z1, "NEW")
 ax1.set_title('NEW 3D Trajectory (Calc API)', fontsize=12)
 ax1.set_xlabel('X Position')
 ax1.set_ylabel('Y Position')
@@ -73,7 +105,8 @@ ax1.legend()
 
 # Plot 2: OLD_3D
 ax2 = fig.add_subplot(132, projection='3d')
-ax2.scatter(x2, y2, z2, c=range(len(x2)), cmap='plasma', s=10, label='Old API')
+ax2.scatter(x2, y2, z2, c=colors2, cmap='Greens', s=10, label='Old API')
+mark_start_finish(ax2, x2, y2, z2, "OLD")
 ax2.set_title('OLD 3D Trajectory (p_API)', fontsize=12)
 ax2.set_xlabel('X Position')
 ax2.set_ylabel('Y Position')
@@ -82,7 +115,8 @@ ax2.legend()
 
 # Plot 3: OG_3D
 ax3 = fig.add_subplot(133, projection='3d')
-ax3.scatter(x3, y3, z3, c=range(len(x3)), cmap='cool', s=10, label='Original')
+ax3.scatter(x3, y3, z3, c=colors3, cmap='Greens', s=10, label='Original')
+mark_start_finish(ax3, x3, y3, z3, "OG")
 ax3.set_title('OG 3D Trajectory (p_OG)', fontsize=12)
 ax3.set_xlabel('X Position')
 ax3.set_ylabel('Y Position')
@@ -91,3 +125,4 @@ ax3.legend()
 
 plt.tight_layout()
 plt.show()
+

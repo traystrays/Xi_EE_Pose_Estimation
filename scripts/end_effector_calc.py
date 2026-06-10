@@ -48,9 +48,9 @@ CL_T_ECM[:3, 3] = t_X.flatten()
 # NEW Matrix
 
 CL_T_ECM[:3, :3] = [
-    [-0.5171981859, -0.8558511633, 0.0049822532],
-    [0.8536669857, -0.5154437886, 0.0746349669],
-    [-0.0613083518, 0.0428542545, 0.9971984752],
+    [-0.8429681276, -0.537944389,   0.0045354348],
+    [ 0.5367377616, -0.8404487426,  0.0745552573], 
+    [-0.0362947818,  0.0652820448,  0.9972065701],
 ]
 
 CL_T_ECM[:3, 3] = [-87.3955663331, 8.1365055571, 148.7597741708]
@@ -128,13 +128,13 @@ for i in range(0, 1602, 1):
     print("multiplied by inverse ECM_T same for everything:")
     print(inv_ECM_T)
 
+    # NOTE: CHANGE HERE
     PSM2_in_ECM = inv_ECM_T @ PSM2_T
+    # PSM2_in_ECM = PSM2_T
 
     # print(PSM2_in_ECM)
     PSM2_in_CL = CL_T_ECM @ PSM2_in_ECM
     print(PSM2_in_CL)
-
-    ##### UNDO FROM BELOW #####
 
     p_G = np.array([0, 0, 0, 1]) # origin in PSM2 frame
 
@@ -161,6 +161,8 @@ for i in range(0, 1602, 1):
 df = pd.DataFrame()
 df["p_2D"] = p_2D_list
 df.to_csv(full_2D_csv, index=False)
+
+# save p_API 3D points of the end effector here
 full_API_csv = Path(r"C:\Users\Tracy\Projects\Xi_EE_Pose\data\full_API_projection.csv")
 df["p_API"] = p_API_list
 df.to_csv(full_API_csv, index=False)

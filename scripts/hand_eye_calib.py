@@ -272,8 +272,11 @@ if __name__ == "__main__":
     # print(A_list.shape, B_list.shape)
 
     X, R_X, t_X, info = solve_X(A_list, B_list)
+    np.save
+
+
 
     print(R_X)
     print(t_X)
-
+    np.savez("hand_eye_calib_result.npz", R=R_X, t=t_X)
 
