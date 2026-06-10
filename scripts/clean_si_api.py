@@ -116,7 +116,7 @@ def sync_si_data_with_video():
     matched = matched.copy()
     matched["Transform"] = transform_matrices
 
-    hand_eye_output = Output_Data / "hand_eye_calibration_data.csv"
+    hand_eye_output = Output_Data / "hand_eye_calibration_data_METERS.csv"
     output_df = matched[["frame_id", "frame_time", "Transform"]]
     output_df.to_csv(hand_eye_output, index=False)
 
@@ -242,9 +242,9 @@ def B_matrix():
     # hand-eye calibration problem. 
     ## INPUTS 
     pattern_size = (7,6) # columns, rows of INNER corners
-    square_size_mm = 15 # 15mm
+    square_size_m = 0.015 # in meters
 
-    object_points = (checkerboard_inner_corners(7, 6, square_size_mm))
+    object_points = (checkerboard_inner_corners(7, 6, square_size_m))
 
     left_K = loadmat(left_K_path)['K'].astype(np.float64)
     # print(left_K.dtype)
@@ -349,10 +349,10 @@ def B_matrix():
 
 
     # Save outputs
-    B_npy_path = Output_Data / "B_matrices.npy"
+    B_npy_path = Output_Data / "B_matrices_METERS.npy"
     np.save(B_npy_path, B_matrices)
 
-    B_csv_path = Output_Data / "B_matrices.csv"
+    B_csv_path = Output_Data / "B_matrices_METERS.csv"
     B_df = pd.DataFrame(B_records)
     B_df.to_csv(B_csv_path, index=False)
 
@@ -389,7 +389,7 @@ def A_matrix():
         Output_Data / "hand_eye_calibration_data.csv",
         usecols=["frame_id", "Transform"],
     )
-    camera = pd.read_csv(Output_Data / "B_matrices.csv", usecols=["from_frame", "to_frame"]).reset_index(drop=True)
+    camera = pd.read_csv(Output_Data / "B_matrices_METERS.csv", usecols=["from_frame", "to_frame"]).reset_index(drop=True)
 
     A_matrices = []
     A_records = []
@@ -436,10 +436,10 @@ def A_matrix():
 
     A_matrices = np.array(A_matrices)
 
-    A_npy_path = Output_Data / "A_matrices.npy"
+    A_npy_path = Output_Data / "A_matrices_METERS.npy"
     np.save(A_npy_path, A_matrices)
 
-    A_csv_path = Output_Data / "A_matrices.csv"
+    A_csv_path = Output_Data / "A_matrices_METERS.csv"
     A_df = pd.DataFrame(A_records)
     A_df.to_csv(A_csv_path, index=False)
 

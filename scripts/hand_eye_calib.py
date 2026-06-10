@@ -2,13 +2,14 @@ from pathlib import Path
 import pandas as pd
 import cv2
 import numpy as np
+import time
 
 # Using the classic AX = XB method 
 # to find the hand-eye calibration between between ECM and camera
 
 # Using data from Si first, then go to OR to collect data on Xi
-A_csv = Path(r"C:\Users\Tracy\Projects\Xi_EE_Pose\data\si_data_0605\A_matrices.csv")
-B_csv = Path(r"C:\Users\Tracy\Projects\Xi_EE_Pose\data\si_data_0605\B_matrices.csv")
+A_csv = Path(r"C:\Users\Tracy\Projects\Xi_EE_Pose\data\si_data_0605\A_matrices_METERS.csv")
+B_csv = Path(r"C:\Users\Tracy\Projects\Xi_EE_Pose\data\si_data_0605\B_matrices_METERS.csv")
 
 # Assemble to lists
 def load_transform_list(csv_path):
@@ -272,11 +273,16 @@ if __name__ == "__main__":
     # print(A_list.shape, B_list.shape)
 
     X, R_X, t_X, info = solve_X(A_list, B_list)
-    np.save
+
 
 
 
     print(R_X)
     print(t_X)
-    np.savez("hand_eye_calib_result.npz", R=R_X, t=t_X)
+    np.savez(r"C:\Users\Tracy\Projects\Xi_EE_Pose\scripts\hand_eye_calib_result.npz", R_X=R_X, t_X=t_X)
+
+    time.sleep(10)
+    calib = np.load("hand_eye_calib_result.npz")
+    print("HELLO", calib["R_X"])
+    print(calib["t_X"])
 

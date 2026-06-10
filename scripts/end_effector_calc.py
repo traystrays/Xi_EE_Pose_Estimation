@@ -11,7 +11,7 @@ right_K = r"C:\Users\Tracy\Documents\MATLAB\20260514_xi_data\cam_right_K.mat"
 hand_eye_calib_csv = Path(r"C:\Users\Tracy\Projects\Xi_EE_Pose\data\xi_data_0514\hand_eye_calib_data.csv")
 full_2D_csv = Path(r"C:\Users\Tracy\Projects\Xi_EE_Pose\data\xi_data_0514\full_2D_projection.csv")
 
-calib = np.load("point_hand_eye_calib_result.npz")
+calib = np.load(r"C:\Users\Tracy\Projects\Xi_EE_Pose\scripts\hand_eye_calib_result.npz")
 
 random_csv = Path(r"D:\DataVGH\dvapi\KinCsvLog_09-09-2025_17-58-42.368.csv")
 
@@ -38,22 +38,14 @@ print(frame.shape)
 if not ret:
     print(f"Error reading frame {frame_id}")
 
-calib = np.load("point_hand_eye_calib_result.npz")
-R_X, t_X = calib['R'], calib['t']
+
+R_X, t_X = calib['R_X'], calib['t_X']
 print(R_X,t_X)
 CL_T_ECM = np.eye(4)
 CL_T_ECM[:3, :3] = R_X
 CL_T_ECM[:3, 3] = t_X.flatten()
 
-# NEW Matrix
 
-CL_T_ECM[:3, :3] = [
-    [-0.8429681276, -0.537944389,   0.0045354348],
-    [ 0.5367377616, -0.8404487426,  0.0745552573], 
-    [-0.0362947818,  0.0652820448,  0.9972065701],
-]
-
-CL_T_ECM[:3, 3] = [-87.3955663331, 8.1365055571, 148.7597741708]
 print(CL_T_ECM)
 
 # exit()

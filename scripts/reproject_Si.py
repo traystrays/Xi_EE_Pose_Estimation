@@ -4,6 +4,9 @@ from hand_eye_calib import load_transform_list
 from pathlib import Path
 from scipy.io import loadmat
 import cv2
+import pandas as pd
+
+# AX = XB. B we obtain as T_camera_world using Solve.PNP 
 
 # Paths
 
@@ -11,6 +14,7 @@ image_folder    = Path(r"C:\Users\Tracy\Projects\Xi_EE_Pose\checkerboard_images\
 output_folder   = Path(r"C:\Users\Tracy\Projects\Xi_EE_Pose\checkerboard_images\reprojection_verification")
 Hand_eye_npz    = Path(r"C:\Users\Tracy\Projects\Xi_EE_Pose\scripts\hand_eye_calib_result.npz")
 A_csv           = Path(r"C:\Users\Tracy\Projects\Xi_EE_Pose\data\si_data_0605\A_matrices.csv")
+B_csv = Path(r"C:\Users\Tracy\Projects\Xi_EE_Pose\data\si_data_0605\B_matrices.csv")
 left_K_path     = Path(r"C:\Users\Tracy\Documents\MATLAB\20260605_si_data\K_cam1_Si.mat")
 
 output_folder.mkdir(parents=True, exist_ok=True)
@@ -19,15 +23,17 @@ output_folder.mkdir(parents=True, exist_ok=True)
 # Load hand-eye X
 calib = np.load(Hand_eye_npz)
 X = np.eye(4)
-X[:3, :3] = calib["R"]
-X[:3, 3]  = calib["t"].reshape(3)
+X[:3, :3] = calib["R_X"]
+X[:3, 3]  = calib["t_X"].reshape(3)
 X_inv = np.linalg.inv(X)
- 
-print("Hand-eye X:")
-print(X)
- 
 
-K          = loadmat(left_K_path)["K"].astype(np.float64)
+print(X)
+print(X_inv)
+
+
+# print(X@X_inv)
+
+K = loadmat(left_K_path)["K"].astype(np.float64)
 dist_coeffs = np.array(
     [-2.008552794758558e-06, -3.925424424248872e-12, 0, 0, 0],
     dtype=np.float64
@@ -36,28 +42,27 @@ dist_coeffs = np.array(
 print("\nCamera K:")
 print(K)
  
-# ------------------------------------------------------------
-# Checkerboard geometry
-# ------------------------------------------------------------
+# Set checkerboard geometry
 COLUMNS      = 7    # inner corners
 ROWS         = 6
-SQUARE_MM    = 15.0
+SQUARE_MM    = 0.015 #m
 pattern_size = (COLUMNS, ROWS)
- 
+
+# object list  
 object_points = checkerboard_inner_corners(
     columns=COLUMNS,
     rows=ROWS,
     square_size=SQUARE_MM
 ).astype(np.float64)
  
-# ------------------------------------------------------------
 # Load A matrices
-# ------------------------------------------------------------
 A_keys, A_list = load_transform_list(A_csv)
- 
-# ------------------------------------------------------------
+B_keys, B_list = load_transform_list(B_csv)
+
+# exit()
+
 # Helper: reproject object_points given a T_cam_board
-# ------------------------------------------------------------
+
 def reproject_board(T_cam_board, object_points, K, dist_coeffs):
     """
     Given a 4x4 camera-to-board transform, project all object_points
@@ -76,7 +81,10 @@ def reproject_board(T_cam_board, object_points, K, dist_coeffs):
     )
     return projected.reshape(-1, 2)
  
- 
+#  def assemble_A(from_frame, to_frame):
+
+
+
 # ------------------------------------------------------------
 # Helper: draw verification result on image
 # ------------------------------------------------------------
@@ -126,11 +134,14 @@ def draw_verification(image, detected_corners, projected_corners, mean_error, pa
 # ------------------------------------------------------------
 all_errors = []
  
-for idx, (key, A) in enumerate(zip(A_keys, A_list)):
+AX = []
+XB = []
+
+for idx, (key, A, B) in enumerate(zip(A_keys, A_list, B_list)):
     from_frame, to_frame = key
-    if from_frame > 1000 or to_frame > 1000:
-        continue
-    from_frame, to_frame = key
+
+
+    print(from_frame, to_frame, "print B:", B)
  
     image_i_path = image_folder / f"frame_{from_frame}_left.jpg"
     image_j_path = image_folder / f"frame_{to_frame}_left.jpg"
@@ -146,7 +157,7 @@ for idx, (key, A) in enumerate(zip(A_keys, A_list)):
         print(f"Skipping pair {key}: could not load image(s)")
         continue
  
-    # --- PnP on frame i ---
+    # Find B_i pose based on 
     result_i = estimate_checkerboard_pose(
         image=image_i,
         object_points=object_points,
@@ -159,9 +170,11 @@ for idx, (key, A) in enumerate(zip(A_keys, A_list)):
         print(f"Skipping pair {key}: checkerboard not detected in frame {from_frame}")
         continue
  
-    T_cam_board_i, _, _, _ = result_i
+    B_i, _, _, _ = result_i
+
+    print("this is Bi", B_i)
  
-    # --- PnP on frame j (ground truth for comparison) ---
+    # Find B_j (ground truth for comparison) ---
     result_j = estimate_checkerboard_pose(
         image=image_j,
         object_points=object_points,
@@ -174,26 +187,48 @@ for idx, (key, A) in enumerate(zip(A_keys, A_list)):
         print(f"Skipping pair {key}: checkerboard not detected in frame {to_frame}")
         continue
  
-    _, _, _, detected_corners_j = result_j
+    B_j, _, _, detected_corners_j = result_j
+
+    # pixel locations 
     detected_corners_j = detected_corners_j.reshape(-1, 2)
+
+    # print("A:\n", A)
+    # print("B:\n", B)
+    print("AX:\n", A @ X)
+    print("XB:\n", X @ B)
+
+    AX.append(A @ X)
+    XB.append(X @ B)
+    # print("diff AX - XB:\n", A @ X - X @ B)
+    
+    # print("Bi:\n", B_i)
+    # print("Bj:\n", B_j)
+
  
     # --- Predict T_cam_board_j using AX = XB ---
-    # Rearranged: T_cam_board_j_predicted = X_inv @ A_ij @ X @ T_cam_board_i
-    T_cam_board_j_predicted = X_inv @ A @ X @ T_cam_board_i
+    # Rearranged: T_cam_board_j_predicted = X_inv @ Aj_inv @Ai @ X @ T_cam_board_i
+   
+    inv_A = np.linalg.inv(A)
+    T_cam_board_j_predicted = X_inv @ inv_A @ X @ B_i
+
+    # print("B_j_projected", T_cam_board_j_predicted)
+
+    # print("detected_corners:", detected_corners_j)
  
-    # Sanity check: Z of predicted board should be positive (in front of camera)
-    predicted_z = T_cam_board_j_predicted[2, 3]
-    if predicted_z <= 0:
-        print(f"  WARNING pair {key}: predicted board Z={predicted_z:.3f} (behind camera) — A matrix likely degenerate")
+    # # Sanity check: Z of predicted board should be positive (in front of camera)
+    # predicted_z = T_cam_board_j_predicted[2, 3]
+    # if predicted_z <= 0:
+    #     print(f"  WARNING pair {key}: predicted board Z={predicted_z:.3f} (behind camera) — A matrix likely degenerate")
  
     # --- Reproject object_points using the predicted pose ---
     projected_corners_j = reproject_board(
-        T_cam_board=T_cam_board_j_predicted,
+        T_cam_board=T_cam_board_j_predicted, 
         object_points=object_points,
         K=K,
         dist_coeffs=dist_coeffs
     )
  
+    # print(projected_corners_j)
     # --- Compute per-corner pixel errors ---
     errors      = np.linalg.norm(projected_corners_j - detected_corners_j, axis=1)
     mean_error  = errors.mean()
@@ -206,7 +241,7 @@ for idx, (key, A) in enumerate(zip(A_keys, A_list)):
     # --- Save visualisation onto frame j ---
     output_image = draw_verification(
         image=image_j,
-        detected_corners=detected_corners_j,
+        detected_corners=detected_corners_j,               
         projected_corners=projected_corners_j,
         mean_error=mean_error,
         pair_label=f"{from_frame}->{to_frame}"
@@ -214,7 +249,14 @@ for idx, (key, A) in enumerate(zip(A_keys, A_list)):
  
     out_path = output_folder / f"verify_{from_frame}_to_{to_frame}.jpg"
     cv2.imwrite(str(out_path), output_image)
- 
+
+
+Path(r"C:\Users\Tracy\Projects\Xi_EE_Pose\data\AXXB").mkdir(parents=True, exist_ok=True)
+B_csv_path = Path(r"C:\Users\Tracy\Projects\Xi_EE_Pose\data\AXXB\.csv")
+
+B_df = pd.DataFrame({"AX": AX, "XB": XB})
+B_df.to_csv(B_csv_path, index=False)
+
 # ------------------------------------------------------------
 # Summary
 # ------------------------------------------------------------
