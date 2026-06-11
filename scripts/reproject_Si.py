@@ -35,7 +35,7 @@ print(X_inv)
 
 K = loadmat(left_K_path)["K"].astype(np.float64)
 dist_coeffs = np.array(
-    [-2.008552794758558e-06, -3.925424424248872e-12, 0, 0, 0],
+    [-2.008552794758558e-09, -3.925424424248872e-15, 0, 0, 0],
     dtype=np.float64
 )
  

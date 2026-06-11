@@ -71,6 +71,8 @@ def draw_over_video(video_path: Path, points, output_path: Path | None = None):
         ret, frame = cap.read()
         if not ret:
             break
+        
+        # frame = np.ones((height, width, 3), dtype=np.uint8) * 255  # white background
 
         if frame_index < len(points) and points[frame_index] is not None:
             x, y = points[frame_index]

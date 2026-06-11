@@ -256,7 +256,7 @@ def B_matrix():
 
     # ======== Replace with your real distortion coefficients if you have them.
 
-    dist_coeffs = np.array([-2.008552794758558e-06, -3.925424424248872e-12, 0, 0, 0], dtype=np.float64)
+    dist_coeffs = np.array([-2.008552794758558e-09, -3.925424424248872e-15, 0, 0, 0], dtype=np.float64)
 
     pose_results = []
 

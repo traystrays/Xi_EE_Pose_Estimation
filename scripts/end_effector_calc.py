@@ -143,6 +143,9 @@ for i in range(0, 1602, 1):
 
     u, v = project_2d(left_K, p_CAM)
 
+    # u, v = abs(u), abs(v)
+    # u, v = u/100.0, v/100.0
+
     print(u, v)
     p_2D_list.append(f"[{u:.6f} {v:.6f}]")
 
