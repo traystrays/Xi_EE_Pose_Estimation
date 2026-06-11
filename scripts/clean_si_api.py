@@ -143,24 +143,72 @@ def sync_si_data_with_video():
 
     # plt.show()
 
-def select_frames():
+hand_eye_calibration_csv = Path(r"C:\Users\Tracy\Projects\Xi_EE_Pose\data\si_data_0605\hand_eye_calibration_data.csv")
 
-    for i in range (0, 5984, 100):
-        cap = cv2.VideoCapture(left_video)
-        cap.set(cv2.CAP_PROP_POS_FRAMES, i)
-        ret, frame = cap.read()
-        if not ret:
-            print(f"Error reading frame {i} from left video")
-        cap.release()
-        cv2.imwrite(left_output_dir / f"frame_{i}_left.jpg", frame)
 
-        cap = cv2.VideoCapture(right_video)
-        cap.set(cv2.CAP_PROP_POS_FRAMES, i)
-        ret, frame = cap.read()
-        if not ret:
-            print(f"Error reading frame {i} from right video")
-        cap.release()
-        cv2.imwrite(right_output_dir / f"frame_{i}_right.jpg", frame)
+MATLAB_transform = Path(r"C:\Users\Tracy\Projects\Xi_EE_Pose\data\si_data_0605\MATLAB.csv")
+output_csv = Path(r"C:\Users\Tracy\Projects\Xi_EE_Pose\data\si_data_0605\R_t_parsed.csv")
+
+
+def select_and_parse_frames():
+    df = pd.read_csv(MATLAB_transform)
+    
+    results = []
+    for i, row in df.iterrows():
+        numbers = re.findall(r"[-+]?\d*\.?\d+", row["Transform"])
+        T = np.array(numbers, dtype=float).reshape(4, 4)
+        R = T[:3, :3]
+        t = T[:3, 3]
+        results.append({"index": i, "R": R, "t": t, "T": T})
+    
+    return results
+
+
+        # cap = cv2.VideoCapture(left_video)
+        # cap.set(cv2.CAP_PROP_POS_FRAMES, i)
+        # ret, frame = cap.read()
+        # if not ret:
+        #     print(f"Error reading frame {i} from left video")
+        # cap.release()
+        # cv2.imwrite(left_output_dir / f"frame_{i}_left.jpg", frame)
+
+        # cap = cv2.VideoCapture(right_video)
+        # cap.set(cv2.CAP_PROP_POS_FRAMES, i)
+        # ret, frame = cap.read()
+        # if not ret:
+        #     print(f"Error reading frame {i} from right video")
+        # cap.release()
+        # cv2.imwrite(right_output_dir / f"frame_{i}_right.jpg", frame)
+
+
+def select_and_parse_frames():
+    df = pd.read_csv(MATLAB_transform)
+    
+    rows = []
+    for i, row in df.iterrows():
+        numbers = re.findall(r"[-+]?\d*\.?\d+", row["Transform"])
+        T = np.array(numbers, dtype=float).reshape(4, 4)
+        R = T[:3, :3]
+        t = T[:3, 3]
+        
+        print(f"Index {i}:")
+        print(f"  R = {R}")
+        print(f"  t = {t}")
+        
+        # Flatten R (9 values) and t (3 values) into one row
+        rows.append({
+            "index": i,
+            "R11": R[0,0], "R12": R[0,1], "R13": R[0,2],
+            "R21": R[1,0], "R22": R[1,1], "R23": R[1,2],
+            "R31": R[2,0], "R32": R[2,1], "R33": R[2,2],
+            "tx": t[0], "ty": t[1], "tz": t[2]
+        })
+    
+    result_df = pd.DataFrame(rows)
+    result_df.to_csv(output_csv, index=False)
+    print(f"Saved to {output_csv}")
+    return result_df
+
 
 def checkerboard_inner_corners(columns, rows, square_size):
     # Defines checkerboard pattern based on given pattern and square size
@@ -233,6 +281,7 @@ def estimate_checkerboard_pose(image, object_points, K, dist_coeffs, pattern_siz
     T_cam_board[:3, 3] = tvec.flatten()
 
     return T_cam_board, rvec, tvec, image_points
+
 
 
 # reproject back onto the image and see if the handeye calibration is correct
@@ -488,8 +537,9 @@ def A_matrix():
     # return A_matrices
 
 if __name__ == "__main__":
-    B_matrix()
-    A_matrix()
+    select_and_parse_frames()
+    # B_matrix()
+    # A_matrix()
     # sync_si_data_with_video()
 
 
