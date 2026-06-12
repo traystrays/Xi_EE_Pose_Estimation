@@ -12,9 +12,9 @@ import pandas as pd
 
 image_folder    = Path(r"C:\Users\Tracy\Projects\Xi_EE_Pose\checkerboard_images\left")
 output_folder   = Path(r"C:\Users\Tracy\Projects\Xi_EE_Pose\checkerboard_images\reprojection_verification")
-Hand_eye_npz    = Path(r"C:\Users\Tracy\Projects\Xi_EE_Pose\scripts\hand_eye_calib_result.npz")
-A_csv           = Path(r"C:\Users\Tracy\Projects\Xi_EE_Pose\data\si_data_0605\A_matrices.csv")
-B_csv = Path(r"C:\Users\Tracy\Projects\Xi_EE_Pose\data\si_data_0605\B_matrices.csv")
+Hand_eye_npz    = Path(r"C:\Users\Tracy\Projects\Xi_EE_Pose\data\si_data_0605\MATLAB_camera_robot_transform.npz")
+A_csv           = Path(r"C:\Users\Tracy\Projects\Xi_EE_Pose\data\si_data_0605\A_matrices_METERS.csv")
+B_csv = Path(r"C:\Users\Tracy\Projects\Xi_EE_Pose\data\si_data_0605\B_matrices_METERS.csv")
 left_K_path     = Path(r"C:\Users\Tracy\Documents\MATLAB\20260605_si_data\K_cam1_Si.mat")
 
 output_folder.mkdir(parents=True, exist_ok=True)
@@ -28,14 +28,17 @@ X[:3, 3]  = calib["t_X"].reshape(3)
 X_inv = np.linalg.inv(X)
 
 print(X)
-print(X_inv)
 
 
 # print(X@X_inv)
 
 K = loadmat(left_K_path)["K"].astype(np.float64)
+print(K)
+
+# Unitless
+
 dist_coeffs = np.array(
-    [-2.008552794758558e-09, -3.925424424248872e-15, 0, 0, 0],
+    [-2.008552794758558e-06, -3.925424424248872e-12, 0, 0, 0],
     dtype=np.float64
 )
  

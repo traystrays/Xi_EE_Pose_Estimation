@@ -40,11 +40,15 @@ if not ret:
 
 
 R_X, t_X = calib['R_X'], calib['t_X']
-print(R_X,t_X)
+#  print(R_X,t_X)
 CL_T_ECM = np.eye(4)
 CL_T_ECM[:3, :3] = R_X
 CL_T_ECM[:3, 3] = t_X.flatten()
 
+CL_T_ECM = [[ 0.9878,    0.1386,   -0.0715,    0.0431],
+     [-0.1398,    0.9901,   -0.0116,   -0.0574],
+     [ 0.0692 ,   0.0214,    0.9974,   -0.9582],
+     [0,         0,         0,    1.0000]]
 
 print(CL_T_ECM)
 

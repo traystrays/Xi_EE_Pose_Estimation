@@ -280,8 +280,6 @@ if __name__ == "__main__":
     print(R_X)
     print(t_X)
     np.savez(r"C:\Users\Tracy\Projects\Xi_EE_Pose\scripts\hand_eye_calib_result.npz", R_X=R_X, t_X=t_X)
-
-    time.sleep(10)
     calib = np.load("hand_eye_calib_result.npz")
     print("HELLO", calib["R_X"])
     print(calib["t_X"])

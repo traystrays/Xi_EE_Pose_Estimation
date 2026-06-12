@@ -5,6 +5,7 @@ import numpy as np
 import cv2
 from scipy.io import loadmat
 import re
+import math 
 
 # Paths
 Si_Data = Path(r"C:\Users\Tracy\Documents\2026 RCL UBC\si_data_06052026\data_local_part_1_5_6_2026_13_28_44.csv")
@@ -294,9 +295,11 @@ def B_matrix():
     square_size_m = 0.015 # in meters
 
     object_points = (checkerboard_inner_corners(7, 6, square_size_m))
-
     left_K = loadmat(left_K_path)['K'].astype(np.float64)
-    # print(left_K.dtype)
+
+    print(left_K)
+
+    # exit()
 
     image_folder = Path(r"C:\Users\Tracy\Projects\Xi_EE_Pose\checkerboard_images\left")
 
@@ -305,7 +308,7 @@ def B_matrix():
 
     # ======== Replace with your real distortion coefficients if you have them.
 
-    dist_coeffs = np.array([-2.008552794758558e-09, -3.925424424248872e-15, 0, 0, 0], dtype=np.float64)
+    dist_coeffs = np.array([-2.008552794758558e-06, -3.925424424248872e-12, 0, 0, 0], dtype=np.float64)
 
     pose_results = []
 
@@ -537,10 +540,11 @@ def A_matrix():
     # return A_matrices
 
 if __name__ == "__main__":
-    select_and_parse_frames()
+    # select_and_parse_frames()
     # B_matrix()
     # A_matrix()
     # sync_si_data_with_video()
+    sync_si_data_with_video()
 
 
 
