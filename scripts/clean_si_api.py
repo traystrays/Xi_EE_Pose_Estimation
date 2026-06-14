@@ -8,18 +8,23 @@ import re
 import math 
 
 # Paths
-Si_Data = Path(r"C:\Users\Tracy\Documents\2026 RCL UBC\si_data_06052026\data_local_part_1_5_6_2026_13_28_44.csv")
-Left_cam_timestamp = Path(r"C:\Users\Tracy\Projects\Xi_EE_Pose\data\si_data_0605\video_stream_1_20260605_132941_timestamps.txt")
-Output_Data = Path(r"C:\Users\Tracy\Projects\Xi_EE_Pose\data\si_data_0605")
+Si_Data = Path(r"C:\Users\Tracy\Documents\2026 RCL UBC\si_data_06122026\data_local_part_1_12_6_2026_17_8_40.csv")
+Left_cam_timestamp = Path(r"C:\Users\Tracy\Documents\2026 RCL UBC\si_data_06122026\video_stream_1_20260612_170858_timestamps.txt")
+Output_Data = Path(r"C:\Users\Tracy\Projects\Xi_EE_Pose\data\si_data_0612")
 
 left_video = Path(r"C:\Users\Tracy\Documents\2026 RCL UBC\si_data_06052026\video_stream_1_20260605_132941.mp4")
-left_output_dir = Path(r"C:\Users\Tracy\Projects\Xi_EE_Pose\checkerboard_images\left")
+left_output_dir = Path(r"C:\Users\Tracy\Projects\Xi_EE_Pose\checkerboard_images\si_20260612\left")
 right_video = Path(r"C:\Users\Tracy\Documents\2026 RCL UBC\si_data_06052026\video_stream_2_20260605_132941.mp4")
-right_output_dir = Path(r"C:\Users\Tracy\Projects\Xi_EE_Pose\checkerboard_images\right")  
+right_output_dir = Path(r"C:\Users\Tracy\Projects\Xi_EE_Pose\checkerboard_images\si_20260612\right")  
 
 left_K_path = Path(r"C:\Users\Tracy\Documents\MATLAB\20260605_si_data\K_cam1_Si.mat")
 
+Output_Data.mkdir(parents=True, exist_ok=True)
+left_output_dir.mkdir(parents=True, exist_ok=True)
+right_output_dir.mkdir(parents=True, exist_ok=True)
+
 def sync_si_data_with_video():
+
     FRAME_TIMEZONE = "America/Vancouver"
     ARM = "mip Index (ECM)"
 
@@ -46,7 +51,6 @@ def sync_si_data_with_video():
         unit="us",
         utc=True
     )
-
     # print(si_timestamp.head())
 
     # Find the column index of "mip Index (ECM)"
@@ -70,9 +74,9 @@ def sync_si_data_with_video():
             "o7",
             "o8"
         ]
+    
     ecm_pos = ecm_pos.sort_values("timestamp")
-    # print(ecm_pos.head())
-
+    print(ecm_pos.head())
 
     tolerance = pd.Timedelta("25ms")
 
@@ -88,10 +92,13 @@ def sync_si_data_with_video():
     print(matched.head())
 
     # Build transform matrices from matched rows when rotation (o0..o8) and position (pos x,y,z) exist
+
     transform_matrices = []
+
     for idx, row in matched.iterrows():
         try:
             t = np.array([row["pos x"], row["pos y"], row["pos z"]], dtype=float)
+
             R = np.array([
                 [row["o0"], row["o1"], row["o2"]],
                 [row["o3"], row["o4"], row["o5"]],
@@ -108,6 +115,7 @@ def sync_si_data_with_video():
 
             transform_matrices.append(T)
 
+
         except KeyError:
             transform_matrices.append(np.full((4, 4), np.nan, dtype=float))
         except Exception as e:
@@ -121,34 +129,41 @@ def sync_si_data_with_video():
     output_df = matched[["frame_id", "frame_time", "Transform"]]
     output_df.to_csv(hand_eye_output, index=False)
 
+    
+    
     # 3D MATPLOT LIB CODE BELOW
 
-    # x_coords = matched["ECM_pos_x"].tolist()
-    # y_coords = matched["ECM_pos_y"].tolist()
-    # z_coords = matched["ECM_pos_z"].tolist()
+    x_coords = ecm_pos["pos x"].tolist()
+    y_coords = ecm_pos["pos y"].tolist()
+    z_coords = ecm_pos["pos z"].tolist()
 
-    # print(f"Total matched points: {len(x_coords)}")
-    # # Create the 3D Plot
-    # fig = plt.figure(figsize=(10, 8)) # figure size is 10 by 8 inches
-    # ax = fig.add_subplot(111, projection='3d')
+    print(f"Total matched points: {len(x_coords)}")
+    # Create the 3D PlotS
+    fig = plt.figure(figsize=(10, 8)) # figure size is 10 by 8 inches
+    ax = fig.add_subplot(111, projection='3d')
 
-    # # Plot only the points as individual dots
-    # ax.scatter(x_coords, y_coords, z_coords, c=range(len(x_coords)), cmap='viridis', s=10, label='PSM2 Tip Positions')
+    # Plot only the points as individual dots
+    ax.scatter(x_coords, y_coords, z_coords, c=range(len(x_coords)), cmap='viridis', s=10, label='ECM')
 
-    # # Customize plot labels and title
-    # ax.set_title('3D Tip Positions', fontsize=14)
-    # ax.set_xlabel('X Position')
-    # ax.set_ylabel('Y Position')
-    # ax.set_zlabel('Z Position')
-    # ax.legend()
+    # Customize plot labels and title
+    ax.set_title('3D Tip Positions', fontsize=14)
+    ax.set_xlabel('X Position')
+    ax.set_ylabel('Y Position')
+    ax.set_zlabel('Z Position')
+    ax.legend()
 
-    # plt.show()
+    plt.show()
+
+
+
 
 hand_eye_calibration_csv = Path(r"C:\Users\Tracy\Projects\Xi_EE_Pose\data\si_data_0605\hand_eye_calibration_data.csv")
 
 
 MATLAB_transform = Path(r"C:\Users\Tracy\Projects\Xi_EE_Pose\data\si_data_0605\MATLAB.csv")
 output_csv = Path(r"C:\Users\Tracy\Projects\Xi_EE_Pose\data\si_data_0605\R_t_parsed.csv")
+
+
 
 
 def select_and_parse_frames():
