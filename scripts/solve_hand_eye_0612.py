@@ -13,7 +13,7 @@ from hand_eye_calib import solve_X, residual_errors
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
-LEFT_K_PATH = Path(r"C:\Users\Tracy\Documents\MATLAB\20260612_si_data\K_left.mat")
+LEFT_K_PATH = Path(r"C:\Users\Tracy\Documents\MATLAB\20260612_si_data\cameraParams_5mm_leftK.mat")
 IMAGE_FOLDER = REPO_ROOT / "checkerboard_images" / "si_20260612" / "calibration"
 MATCHED_TRANSFORMS_CSV = REPO_ROOT / "data" / "si_data_0612" / "matched_transforms.csv"
 OUTPUT_NPZ = REPO_ROOT / "data" / "si_data_0612" / "hand_eye_0612_python.npz"
@@ -24,7 +24,7 @@ SQUARE_SIZE_M = 0.005
 PATTERN_SIZE = (COLUMNS, ROWS)
 
 DIST_COEFFS = np.array(
-    [-0.297863212023482, 0.403564940306343, 0.0, 0.0, 0.0],
+    [-0.306143873919413, 0.4667777390935303, 0.0, 0.0, 0.0],
     dtype=np.float64,
 )
 
@@ -100,7 +100,7 @@ def image_path_for_row(row):
 
 
 def load_absolute_poses():
-    K = loadmat(LEFT_K_PATH)["K"].astype(np.float64)
+    K = loadmat(LEFT_K_PATH)["cameraParams_5mmK"].astype(np.float64)
     object_points = checkerboard_inner_corners(
         columns=COLUMNS,
         rows=ROWS,

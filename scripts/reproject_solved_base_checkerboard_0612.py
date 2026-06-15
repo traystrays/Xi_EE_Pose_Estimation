@@ -27,7 +27,6 @@ DIST_COEFFS = np.array(
     [-0.306143873919413, 0.4667777390935303, 0.0, 0.0, 0.0],
     dtype=np.float64,
 )
-	
 
 DISPLAY_IMAGES = True
 
@@ -91,6 +90,9 @@ def main():
     OUTPUT_FOLDER.mkdir(parents=True, exist_ok=True)
 
     K = loadmat(LEFT_K_PATH)["cameraParams_5mmK"].astype(np.float64)
+
+    print(K)
+
     object_points = checkerboard_inner_corners(
         columns=COLUMNS,
         rows=ROWS,
@@ -99,6 +101,7 @@ def main():
 
     solved = np.load(HAND_EYE_NPZ)
     gripper_T_camera = solved["X"]
+    
     base_T_checkerboard = solved["mean_base_T_checkerboard"]
 
     print("Loaded X = Gripper_T_Camera:")
