@@ -9,15 +9,22 @@ from scipy.spatial.transform import Rotation as R
 
 left_K_path     = Path(r"C:\Users\Tracy\Documents\MATLAB\20260612_si_data\K_left.mat")
 robot_T = Path(r"C:\Users\Tracy\Documents\MATLAB\20260612_si_data\cameraTformWRTGripper.mat")
-image_folder = Path(r"C:\Users\Tracy\Projects\Xi_EE_Pose\checkerboard_images\left")
-A_Transform = Path(r"C:\Users\Tracy\Projects\Xi_EE_Pose\data\si_data_0605\MATLAB.csv")
+OLD_robot_T = Path(r"C:\Users\Tracy\Projects\Xi_EE_Pose\data\si_data_0605\MATLAB_camera_robot_transform.npz")
+image_folder = Path(r"C:\Users\Tracy\Projects\Xi_EE_Pose\checkerboard_images\si_20260612\calibration")
+A_Transform = Path(r"C:\Users\Tracy\Projects\Xi_EE_Pose\data\si_data_0612\matched_transforms.csv")
 
 reprojected_folder = image_folder.parent / "base_prediction_reprojected"
 reprojected_folder.mkdir(exist_ok=True)
 
 
+# calib = np.load(OLD_robot_T)
+# X = np.eye(4)
+# X[:3, :3] = calib["R"]
+# X[:3, 3]  = calib["T"].reshape(3)
 
-# Load hand-eye X
+# print(X)
+# exit()
+# # Load hand-eye X
 X = loadmat(robot_T)["cameraTformWRTGripper_matrix"].astype(np.float64)
 
 
@@ -33,20 +40,18 @@ print(X_inv)
 K = loadmat(left_K_path)["K"].astype(np.float64)
 print(K)
 
-exit()
 
 dist_coeffs = np.array(
-    [-2.008552794758558e-06, -3.925424424248872e-12, 0, 0, 0],
+    [-0.297863212023482, 0.403564940306343, 0, 0, 0],
     dtype=np.float64
 )
- 
-print("\nCamera K:")
-print(K)
+
+
  
 # Set checkerboard geometry
 COLUMNS      = 7    # inner corners
 ROWS         = 6
-SQUARE_MM    = 0.015 #m
+SQUARE_MM    = 0.005 #m
 pattern_size = (COLUMNS, ROWS)
 
 # object list  
@@ -89,16 +94,17 @@ def load_MATLAB_transform(csv_path):
 
 frame_ids, A_X = load_MATLAB_transform(A_Transform)
 
-# print(A_X)
-# print(A_X.shape)
+print(A_X)
+print(A_X.shape)
 
 A_Transform = []
 B_Transform = []
 
+
 # Set checkerboard
 for idx, frame_id in enumerate(frame_ids):
 
-    image_path = image_folder / f"frame_{frame_id}_left.jpg"
+    image_path = image_folder / f"frame_00{frame_id}.png"
 
     if not image_path.exists():
         print(f"image {frame_id} not found")
@@ -129,6 +135,7 @@ print(len(B_Transform))
 
 if (len(A_Transform) != len(B_Transform)):
     print("not same length")
+    exit()
 
 BaseToChecker_List = []
 
@@ -139,7 +146,7 @@ for i in range (0, len(A_Transform)):
     BaseToChecker = A_Transform[i] @ X @ B_Transform[i]
     BaseToChecker_List.append(BaseToChecker)
 
-print(BaseToChecker_List[:10])
+print(BaseToChecker_List)
 
 
 def transform_points(T, points_3d):
@@ -164,90 +171,90 @@ points_camera = transform_points(Camera_T_Base, points_base)
 
 
 
-# def project_to_rotation(R_mat):
-#     """
-#     Fix tiny numerical errors so R is a valid rotation matrix.
-#     """
-#     U, _, Vt = np.linalg.svd(R_mat)
-#     R_fixed = U @ Vt
+def project_to_rotation(R_mat):
+    """
+    Fix tiny numerical errors so R is a valid rotation matrix.
+    """
+    U, _, Vt = np.linalg.svd(R_mat)
+    R_fixed = U @ Vt
 
-#     if np.linalg.det(R_fixed) < 0:
-#         U[:, -1] *= -1
-#         R_fixed = U @ Vt
+    if np.linalg.det(R_fixed) < 0:
+        U[:, -1] *= -1
+        R_fixed = U @ Vt
 
-#     return R_fixed
+    return R_fixed
 
 
-# def analyze_transform_deviation(T_list):
-#     """
-#     T_list shape should be (N, 4, 4)
-#     """
+def analyze_transform_deviation(T_list):
+    """
+    T_list shape should be (N, 4, 4)
+    """
 
-#     T_list = np.asarray(T_list)
+    T_list = np.asarray(T_list)
 
-#     # Separate rotation and translation
-#     R_list = T_list[:, :3, :3]
-#     t_list = T_list[:, :3, 3]
+    # Separate rotation and translation
+    R_list = T_list[:, :3, :3]
+    t_list = T_list[:, :3, 3]
 
-#     # Clean rotations
-#     R_list = np.array([project_to_rotation(Ri) for Ri in R_list])
+    # Clean rotations
+    R_list = np.array([project_to_rotation(Ri) for Ri in R_list])
 
-#     # Mean translation
-#     t_mean = np.mean(t_list, axis=0)
+    # Mean translation
+    t_mean = np.mean(t_list, axis=0)
 
-#     # Mean rotation
-#     rotations = R.from_matrix(R_list)
-#     R_mean = rotations.mean().as_matrix()
+    # Mean rotation
+    rotations = R.from_matrix(R_list)
+    R_mean = rotations.mean().as_matrix()
 
-#     # Build mean transform
-#     T_mean = np.eye(4)
-#     T_mean[:3, :3] = R_mean
-#     T_mean[:3, 3] = t_mean
+    # Build mean transform
+    T_mean = np.eye(4)
+    T_mean[:3, :3] = R_mean
+    T_mean[:3, 3] = t_mean
 
-#     translation_errors = []
-#     rotation_errors_deg = []
+    translation_errors = []
+    rotation_errors_deg = []
 
-#     for Ti in T_list:
-#         # Error transform from mean to this sample
-#         T_err = np.linalg.inv(T_mean) @ Ti
+    for Ti in T_list:
+        # Error transform from mean to this sample
+        T_err = np.linalg.inv(T_mean) @ Ti
 
-#         # Translation error
-#         t_err = T_err[:3, 3]
-#         t_err_norm = np.linalg.norm(t_err)
+        # Translation error
+        t_err = T_err[:3, 3]
+        t_err_norm = np.linalg.norm(t_err)
 
-#         # Rotation error
-#         R_err = T_err[:3, :3]
-#         R_err = project_to_rotation(R_err)
-#         angle_deg = R.from_matrix(R_err).magnitude() * 180 / np.pi
+        # Rotation error
+        R_err = T_err[:3, :3]
+        R_err = project_to_rotation(R_err)
+        angle_deg = R.from_matrix(R_err).magnitude() * 180 / np.pi
 
-#         translation_errors.append(t_err_norm)
-#         rotation_errors_deg.append(angle_deg)
+        translation_errors.append(t_err_norm)
+        rotation_errors_deg.append(angle_deg)
 
-#     translation_errors = np.array(translation_errors)
-#     rotation_errors_deg = np.array(rotation_errors_deg)
+    translation_errors = np.array(translation_errors)
+    rotation_errors_deg = np.array(rotation_errors_deg)
 
-#     print("Mean transform:")
-#     print(T_mean)
+    print("Mean transform:")
+    print(T_mean)
 
-#     print("\nTranslation mean:")
-#     print(t_mean)
+    print("\nTranslation mean:")
+    print(t_mean)
 
-#     print("\nTranslation error for each transform:")
-#     print(translation_errors)
+    print("\nTranslation error for each transform:")
+    print(translation_errors)
 
-#     print("\nRotation error in degrees for each transform:")
-#     print(rotation_errors_deg)
+    print("\nRotation error in degrees for each transform:")
+    print(rotation_errors_deg)
 
-#     print("\nSummary:")
-#     print(f"Translation RMS error: {np.sqrt(np.mean(translation_errors**2))}")
-#     print(f"Translation mean error: {np.mean(translation_errors)}")
-#     print(f"Translation max error: {np.max(translation_errors)}")
+    print("\nSummary:")
+    print(f"Translation RMS error: {np.sqrt(np.mean(translation_errors**2))}")
+    print(f"Translation mean error: {np.mean(translation_errors)}")
+    print(f"Translation max error: {np.max(translation_errors)}")
 
-#     print(f"Rotation RMS error deg: {np.sqrt(np.mean(rotation_errors_deg**2))}")
-#     print(f"Rotation mean error deg: {np.mean(rotation_errors_deg)}")
-#     print(f"Rotation max error deg: {np.max(rotation_errors_deg)}")
+    print(f"Rotation RMS error deg: {np.sqrt(np.mean(rotation_errors_deg**2))}")
+    print(f"Rotation mean error deg: {np.mean(rotation_errors_deg)}")
+    print(f"Rotation max error deg: {np.max(rotation_errors_deg)}")
 
-#     return T_mean, translation_errors, rotation_errors_deg
+    return T_mean, translation_errors, rotation_errors_deg
 
-# T_mean, t_errors, R_errors_deg = analyze_transform_deviation(BaseToChecker_List)
+T_mean, t_errors, R_errors_deg = analyze_transform_deviation(BaseToChecker_List)
 

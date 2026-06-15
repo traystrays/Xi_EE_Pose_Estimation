@@ -1,93 +1,89 @@
 """
-Match saved frames with Transform values.
+Build matched_transforms.csv from saved_frames.csv.
 
-For each frame_number in saved_frames.csv, finds the row in
-hand_eye_calibration_data_METERS.csv where frame_id == frame_number,
-and outputs the corresponding Transform.
+For each selected frame in data/si_data_0612/saved_frames.csv, this script finds
+the matching robot transform in hand_eye_calibration_data_METERS.csv and writes:
 
-Output: matched_transforms.csv with columns:
-    frame_number, image_filename, frame_id, frame_time, Transform
+    data/si_data_0612/matched_transforms.csv
+
+It also writes scripts/gripper_transforms.mat for MATLAB use.
 """
 
-import os
-import pandas as pd
-import scipy.io as sio
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
-import ast
-import re
+import scipy.io as sio
 
 
-SAVED_FRAMES_CSV = r"C:\Users\Tracy\Projects\Xi_EE_Pose\data\si_data_0612\saved_frames.csv"
-TRANSFORM_CSV = r"C:\Users\Tracy\Projects\Xi_EE_Pose\data\si_data_0612\hand_eye_calibration_data_METERS.csv"
-OUTPUT_CSV = r"C:\Users\Tracy\Projects\Xi_EE_Pose\data\si_data_0612\matched_transforms.csv"
+REPO_ROOT = Path(__file__).resolve().parents[1]
+DATA_DIR = REPO_ROOT / "data" / "si_data_0612"
+
+SAVED_FRAMES_CSV = DATA_DIR / "saved_frames.csv"
+TRANSFORM_CSV = DATA_DIR / "hand_eye_calibration_data_METERS.csv"
+OUTPUT_CSV = DATA_DIR / "matched_transforms.csv"
+GRIPPER_TRANSFORMS_MAT = Path(__file__).resolve().with_name("gripper_transforms.mat")
 
 
-# def main():
-#     saved_frames = pd.read_csv(SAVED_FRAMES_CSV)
-#     transforms = pd.read_csv(TRANSFORM_CSV)
+def parse_transform_string(transform_str):
+    values = np.fromstring(
+        transform_str.replace("[", " ").replace("]", " ").replace(",", " "),
+        sep=" ",
+    )
 
-#     # Merge on frame_number (left) == frame_id (right)
-#     merged = saved_frames.merge(
-#         transforms,
-#         left_on="frame_number",
-#         right_on="frame_id",
-#         how="left"
-#     )
+    if values.size != 16:
+        raise ValueError(f"Expected 16 transform values, got {values.size}")
 
-#     # Report any unmatched frame numbers
-#     missing = merged[merged["frame_id"].isna()]
-#     if not missing.empty:
-#         print("Warning: no Transform found for frame_number(s):")
-#         print(missing["frame_number"].tolist())
-
-#     os.makedirs(os.path.dirname(OUTPUT_CSV), exist_ok=True)
-#     merged.to_csv(OUTPUT_CSV, index=False)
-#     print(f"Saved matched results to: {OUTPUT_CSV}")
-#     print(merged.head())
+    return values.reshape(4, 4)
 
 
-# if __name__ == "__main__":
-#     main()
+def main():
+    saved_frames = pd.read_csv(SAVED_FRAMES_CSV)
+    transforms = pd.read_csv(TRANSFORM_CSV)
 
-# df = pd.read_csv(OUTPUT_CSV)
+    saved_frames["frame_number"] = saved_frames["frame_number"].astype(int)
+    transforms["frame_id"] = transforms["frame_id"].astype(int)
 
-# num_pattern = re.compile(r"[-+]?\d*\.?\d+(?:[eE][-+]?\d+)?")
+    saved_frames = (
+        saved_frames.drop_duplicates(subset=["frame_number"], keep="first")
+        .sort_values("frame_number")
+        .reset_index(drop=True)
+    )
 
-# def reformat_transform(s):
-#     nums = [float(x) for x in num_pattern.findall(s)]
-#     if len(nums) != 16:
-#         raise ValueError(f"Expected 16 numbers, got {len(nums)}: {s}")
+    merged = saved_frames.merge(
+        transforms,
+        left_on="frame_number",
+        right_on="frame_id",
+        how="left",
+    )
 
-#     rows = []
-#     for i in range(4):
-#         row_vals = nums[i*4:(i+1)*4]
-#         row_str = " ".join(f"{v: .5f}" for v in row_vals)
-#         rows.append(f"[{row_str}]")
+    missing = merged[merged["frame_id"].isna()]
+    if not missing.empty:
+        print("Warning: no robot transform found for frame(s):")
+        print(missing["frame_number"].astype(int).tolist())
 
-#     return "[" + "\n ".join(rows) + "]"
+    merged = merged.dropna(subset=["frame_id", "Transform"]).copy()
+    merged["frame_id"] = merged["frame_id"].astype(int)
 
-# df["Transform"] = df["Transform"].apply(reformat_transform)
+    output_cols = [
+        "frame_number",
+        "image_filename",
+        "frame_id",
+        "frame_time",
+        "Transform",
+    ]
+    merged[output_cols].to_csv(OUTPUT_CSV, index=False)
 
-# df.to_csv(OUTPUT_CSV, index=False)
-# print("Done. Reformatted all Transform rows.")
+    transform_array = np.array(
+        [parse_transform_string(transform_str) for transform_str in merged["Transform"]]
+    )
+    sio.savemat(GRIPPER_TRANSFORMS_MAT, {"gripperTforms": transform_array})
 
-df = pd.read_csv(OUTPUT_CSV)
+    print(f"Saved matched transforms: {OUTPUT_CSV}")
+    print(f"Matched frame count: {len(merged)}")
+    print(f"Saved MATLAB gripper transforms: {GRIPPER_TRANSFORMS_MAT}")
+    print(f"gripperTforms shape: {transform_array.shape}")
 
 
-
-transforms = []
-for s in df["Transform"]:
-    s_clean = s.replace("[", "").replace("]", "")
-    # Split into 4 rows by newline
-    rows = s_clean.strip().split("\n")
-    mat = []
-    for row in rows:
-        mat.append([float(x) for x in row.split()])
-    mat = np.array(mat)
-    assert mat.shape == (4, 4), f"Unexpected shape: {mat.shape}"
-    transforms.append(mat)
-
-transforms_array = np.array(transforms)  # shape (30, 4, 4)
-print(transforms_array.shape)
-sio.savemat("gripper_transforms.mat", {"gripperTforms": transforms_array})
+if __name__ == "__main__":
+    main()
