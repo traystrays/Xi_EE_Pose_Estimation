@@ -31,7 +31,7 @@ def parse_3d_column(df, col_name):
     x_coords = []
     y_coords = []
     z_coords = []
-    
+      
     for idx, row in df.iterrows():
         point_str = row[col_name]
         
