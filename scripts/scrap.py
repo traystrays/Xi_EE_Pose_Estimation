@@ -77,6 +77,7 @@ def main():
     transform_array = np.array(
         [parse_transform_string(transform_str) for transform_str in merged["Transform"]]
     )
+    
     sio.savemat(GRIPPER_TRANSFORMS_MAT, {"gripperTforms": transform_array})
 
     print(f"Saved matched transforms: {OUTPUT_CSV}")
