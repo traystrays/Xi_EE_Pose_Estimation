@@ -246,22 +246,23 @@ remove_outliers(matched_path)
 
 
 # t_xyz = remove_zero_positions(t_xyz)
-# x, y, z = parse_3d_column(t_xyz, "t_position")
-# t_xyz.to_csv(t_xyz_path, index=False)
-# fig = plt.figure(figsize=(8, 7))
-# ax = fig.add_subplot(111, projection="3d")
 
-# colors = np.linspace(1, 0, len(x))
+x, y, z = parse_3d_column(t_xyz, "t_position")
+t_xyz.to_csv(t_xyz_path, index=False)
+fig = plt.figure(figsize=(8, 7))
+ax = fig.add_subplot(111, projection="3d")
 
-# ax.scatter(x, y, z, c=colors, cmap="viridis", s=8)
-# ax.scatter(x[0], y[0], z[0], c="blue", s=80, marker="o", label="start")
-# ax.scatter(x[-1], y[-1], z[-1], c="red", s=80, marker="X", label="finish")
+colors = np.linspace(1, 0, len(x))
 
-# ax.set_title("Matched Xi Tip Positions After 0 removal")
-# ax.set_xlabel("X")
-# ax.set_ylabel("Y")
-# ax.set_zlabel("Z")
-# ax.legend()
+ax.scatter(x, y, z, c=colors, cmap="viridis", s=8)
+ax.scatter(x[0], y[0], z[0], c="blue", s=80, marker="o", label="start")
+ax.scatter(x[-1], y[-1], z[-1], c="red", s=80, marker="X", label="finish")
 
-# plt.tight_layout()
-# plt.show()
+ax.set_title("Matched Xi Tip Positions")
+ax.set_xlabel("X")
+ax.set_ylabel("Y")
+ax.set_zlabel("Z")
+ax.legend()
+
+plt.tight_layout()
+plt.show()
