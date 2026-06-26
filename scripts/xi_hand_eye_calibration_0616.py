@@ -5,12 +5,14 @@ import cv2
 import numpy as np
 import pandas as pd
 from scipy.io import loadmat
+from scipy.spatial.transform import Rotation as R
 from clean_si_api import estimate_checkerboard_pose, checkerboard_inner_corners
 from hand_eye_calib import solve_X, load_transform_list, match_A_B
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DATA_DIR = REPO_ROOT / "data" / "xi_data_0616"
+
 IMAGE_FOLDER = REPO_ROOT / "checkerboard_images" / "xi_20260616" / "hand_eye_calibration"
 
 MATCHED_TRANSFORMS_CSV = DATA_DIR / "matched_transforms.csv"
@@ -21,6 +23,7 @@ B_CSV_PATH = DATA_DIR / "B_matrices_METERS.csv"
 A_NPY_PATH = DATA_DIR / "A_matrices_METERS.npy"
 A_CSV_PATH = DATA_DIR / "A_matrices_METERS.csv"
 POSE_CSV_PATH = DATA_DIR / "checkerboard_pose_results.csv"
+OUTPUT_NPZ = DATA_DIR / "xi_hand_eye_0616.npz"
 
 CHECKERBOARD_OUTPUT_DIR = IMAGE_FOLDER.parent / "checkerboard_pose_result"
 
@@ -50,14 +53,35 @@ def parse_xi_raw_transform(transform_str):
     if values.size != 12:
         raise ValueError(f"Expected 12 Xi transform values, got {values.size}")
 
-    T = np.eye(4, dtype=np.float64)
+    candidates = []
 
-    # Xi ISI_TIP_TRANSFORM format:
-    # [tx ty tz R00 R01 R02 R10 R11 R12 R20 R21 R22]
-    T[:3, 3] = values[:3]
-    T[:3, :3] = values[3:].reshape(3, 3)
+    row_major = np.eye(4, dtype=np.float64)
+    T_temp = values.reshape(3, 4)
+    row_major[:3, :3] = T_temp[:, :3]
+    row_major[:3, 3] = T_temp[:, 3]
+    candidates.append(("row_major_3x4", row_major))
 
+    translation_first = np.eye(4, dtype=np.float64)
+    translation_first[:3, 3] = values[:3]
+    translation_first[:3, :3] = values[3:].reshape(3, 3)
+    candidates.append(("translation_first", translation_first))
+
+    scored = []
+    for layout_name, T in candidates:
+        R = T[:3, :3]
+        t = T[:3, 3]
+        det_error = abs(np.linalg.det(R) - 1.0)
+        orth_error = np.linalg.norm(R.T @ R - np.eye(3))
+        translation_norm = np.linalg.norm(t)
+        score = det_error + orth_error
+        scored.append((score, layout_name, T, translation_norm))
+
+    score, layout_name, T, translation_norm = min(scored, key=lambda item: item[0])
     validate_rigid_transform(T)
+
+    if translation_norm < 1e-6:
+        raise ValueError(f"Translation is effectively zero using {layout_name}")
+
     return T
 
 
@@ -136,6 +160,7 @@ def B_matrix():
     CHECKERBOARD_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
     K = loadmat(LEFT_K_PATH)["K_left"].astype(np.float64)
+
     object_points = checkerboard_inner_corners(
         columns=COLUMNS,
         rows=ROWS,
@@ -151,7 +176,7 @@ def B_matrix():
         image_path = image_path_for_row(row)
 
         if not image_path.exists():
-            print(f"Frame {frame_id}: image not found: {image_path}")
+            # print(f"Frame {frame_id}: image not found: {image_path}")
             continue
 
         image = cv2.imread(str(image_path))
@@ -171,6 +196,7 @@ def B_matrix():
             continue
 
         T_cam_board, rvec, tvec, corners = result
+
         pose_results.append(
             {
                 "frame_id": frame_id,
@@ -203,6 +229,8 @@ def B_matrix():
         raise RuntimeError(
             f"Need at least 2 detected checkerboard poses to build B; got {len(pose_results)}"
         )
+
+    print(f"Detected checkerboard poses: {len(pose_results)}")
 
     B_matrices = []
     B_records = []
@@ -293,8 +321,157 @@ def A_matrix():
     return A_matrices
 
 
+def project_to_rotation(R_mat):
+    U, _, Vt = np.linalg.svd(R_mat)
+    R_fixed = U @ Vt
+
+    if np.linalg.det(R_fixed) < 0:
+        U[:, -1] *= -1
+        R_fixed = U @ Vt
+
+    return R_fixed
+
+
+def parse_pose_transform(transform_str):
+    values = parse_numbers(transform_str)
+
+    if values.size != 16:
+        raise ValueError(f"Expected 16 checkerboard pose values, got {values.size}")
+
+    return values.reshape(4, 4)
+
+
+def load_absolute_pose_maps():
+    robot_df = pd.read_csv(MATCHED_TRANSFORMS_CSV, usecols=["frame_id", "Raw_Transform"])
+    pose_df = pd.read_csv(POSE_CSV_PATH, usecols=["frame_id", "T_cam_board"])
+
+    base_T_ecm_by_frame = {}
+    for _, row in robot_df.iterrows():
+        frame_id = int(row["frame_id"])
+        try:
+            base_T_ecm_by_frame[frame_id] = parse_xi_raw_transform(row["Raw_Transform"])
+        except ValueError as exc:
+            print(f"Frame {frame_id}: skipped base_T_ECM for consistency check: {exc}")
+
+    camera_T_checker_by_frame = {}
+    for _, row in pose_df.iterrows():
+        frame_id = int(row["frame_id"])
+        try:
+            camera_T_checker_by_frame[frame_id] = parse_pose_transform(
+                row["T_cam_board"]
+            )
+        except ValueError as exc:
+            print(f"Frame {frame_id}: skipped camera_T_checker for consistency check: {exc}")
+
+    return base_T_ecm_by_frame, camera_T_checker_by_frame
+
+
+def analyze_transform_deviation(T_list):
+    T_list = np.asarray(T_list, dtype=np.float64)
+
+    if T_list.ndim != 3 or T_list.shape[1:] != (4, 4):
+        raise ValueError(f"T_list must have shape (N, 4, 4), got {T_list.shape}")
+
+    R_list = np.array([project_to_rotation(T[:3, :3]) for T in T_list])
+    t_list = T_list[:, :3, 3]
+
+    T_mean = np.eye(4, dtype=np.float64)
+    T_mean[:3, :3] = R.from_matrix(R_list).mean().as_matrix()
+    T_mean[:3, 3] = np.mean(t_list, axis=0)
+
+    T_mean_inv = np.linalg.inv(T_mean)
+    translation_errors = []
+    rotation_errors_deg = []
+
+    for T_i in T_list:
+        T_err = T_mean_inv @ T_i
+        translation_errors.append(np.linalg.norm(T_err[:3, 3]))
+
+        R_err = project_to_rotation(T_err[:3, :3])
+        rotation_errors_deg.append(R.from_matrix(R_err).magnitude() * 180.0 / np.pi)
+
+    return T_mean, np.array(translation_errors), np.array(rotation_errors_deg)
+
+
+def find_base_T_checker(ECM_T_camera, matched_keys):
+    base_T_ecm_by_frame, camera_T_checker_by_frame = load_absolute_pose_maps()
+
+    frame_ids = sorted(
+        {
+            frame_id
+            for pair in matched_keys
+            for frame_id in pair
+        }
+    )
+
+    base_T_checker_rows = []
+    base_T_checker_list = []
+    skipped_frames = []
+
+    for frame_id in frame_ids:
+        if frame_id not in base_T_ecm_by_frame or frame_id not in camera_T_checker_by_frame:
+            skipped_frames.append(frame_id)
+            continue
+
+        base_T_checker = (
+            base_T_ecm_by_frame[frame_id]
+            @ ECM_T_camera
+            @ camera_T_checker_by_frame[frame_id]
+        )
+        base_T_checker_list.append(base_T_checker)
+        base_T_checker_rows.append(
+            {
+                "frame_id": frame_id,
+                "Base_T_Checkerboard": np.array2string(
+                    base_T_checker,
+                    precision=10,
+                    suppress_small=False,
+                    separator=" ",
+                ),
+            }
+        )
+
+    if len(base_T_checker_list) < 2:
+        raise RuntimeError(
+            f"Need at least 2 Base_T_Checkerboard samples; got {len(base_T_checker_list)}"
+        )
+
+    mean_base_T_checker, translation_errors, rotation_errors_deg = (
+        analyze_transform_deviation(base_T_checker_list)
+    )
+
+    base_checker_csv = DATA_DIR / "base_T_checkerboard_per_frame.csv"
+    pd.DataFrame(base_T_checker_rows).to_csv(base_checker_csv, index=False)
+
+    print("\nBase_T_Checkerboard consistency")
+    print(f"Frames used: {len(base_T_checker_list)}")
+    if skipped_frames:
+        print(f"Skipped frames: {skipped_frames}")
+
+    print("\nMean Base_T_Checkerboard:")
+    print(mean_base_T_checker)
+
+    print("\nTranslation errors from mean:")
+    print(f"Mean: {np.mean(translation_errors):.6f} m")
+    print(f"RMS:  {np.sqrt(np.mean(translation_errors ** 2)):.6f} m")
+    print(f"Max:  {np.max(translation_errors):.6f} m")
+
+    print("\nRotation errors from mean:")
+    print(f"Mean: {np.mean(rotation_errors_deg):.6f} deg")
+    print(f"RMS:  {np.sqrt(np.mean(rotation_errors_deg ** 2)):.6f} deg")
+    print(f"Max:  {np.max(rotation_errors_deg):.6f} deg")
+    print(f"\nSaved per-frame Base_T_Checkerboard: {base_checker_csv}")
+
+    return (
+        mean_base_T_checker,
+        np.array(base_T_checker_list),
+        translation_errors,
+        rotation_errors_deg,
+    )
 
 if __name__ == "__main__":
+
+    print(DATA_DIR)
     B_matrix()
     A_matrix()
 
@@ -305,6 +482,28 @@ if __name__ == "__main__":
 
     print(matched_keys)
 
-    X, R_X, t_X, info = solve_X(A_list, B_list)
+    ECM_T_Camera, R_X, t_X, info = solve_X(A_list, B_list)
 
-    print(X)
+    print(ECM_T_Camera)
+
+    (
+        mean_base_T_checker,
+        base_T_checker_list,
+        base_T_checker_translation_errors,
+        base_T_checker_rotation_errors_deg,
+    ) = find_base_T_checker(ECM_T_Camera, matched_keys)
+
+    print(mean_base_T_checker)
+
+    np.savez(
+        OUTPUT_NPZ,
+        X=ECM_T_Camera,
+        R_X=R_X,
+        t_X=t_X,
+        matched_keys=np.array(matched_keys, dtype=int),
+        mean_base_T_checker=mean_base_T_checker,
+        base_T_checker_list=base_T_checker_list,
+        base_T_checker_translation_errors=base_T_checker_translation_errors,
+        base_T_checker_rotation_errors_deg=base_T_checker_rotation_errors_deg,
+    )
+    print(f"Saved hand-eye result: {OUTPUT_NPZ}")

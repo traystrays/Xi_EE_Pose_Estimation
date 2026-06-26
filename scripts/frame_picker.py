@@ -40,6 +40,8 @@ def load_valid_frame_ids(csv_path=FRAME_TRANSFORMS_CSV):
 
     if not frame_ids:
         raise ValueError(f"No valid frame_id values found in {csv_path}")
+    
+    print(frame_ids)
 
     return frame_ids
 

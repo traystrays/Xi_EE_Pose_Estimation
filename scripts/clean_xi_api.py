@@ -17,6 +17,7 @@ OUTPUT_PATH = REPO_ROOT/"data"/"xi_data_0616"
 OUTPUT_PATH.mkdir(parents=True, exist_ok=True)
 
 matched_path = OUTPUT_PATH/"frame_transforms.csv"
+
 t_xyz_path = OUTPUT_PATH/"xyz_position_filtered.csv"
 
 
@@ -213,20 +214,29 @@ def remove_outliers(csv_path):
     df = pd.read_csv(csv_path)
     valid_rows = []
     removed_frame_ids = []
-    transform_column = "Raw_Transform" if "Raw_Transform" in df.columns else "Transform"
-
+    Rotation_col = "Rotation"
+    Translation_col = "Translation"
+    count = 0
     for idx, row in df.iterrows():
         try:
-            values = parse_transform_values(row[transform_column])
+            Rotation = row[Rotation_col]
+
+            # turn everything into a string
+            Rotation = parse_transform_values(row[Rotation_col])
+            Translation = parse_transform_values(row[Translation_col])
+
 
             is_valid = (
-                values.size == 12
-                and np.isfinite(values).all()
-                and not np.any(np.abs(values) < 1e-6) # to remove values less than 1e-6
+                np.isfinite(Rotation).all()
+                and np.isfinite(Translation).all()
+                and not np.any(Rotation > 1)
+                and not np.any(np.abs(Rotation) < 1e-6) # to remove values < 1e-6
+                and not np.any(Translation == 0) # to remove values = 0
             )
 
             if is_valid:
                 valid_rows.append(idx)
+                count+=1
             else:
                 removed_frame_ids.append(int(row["frame_id"]))
 
@@ -237,7 +247,7 @@ def remove_outliers(csv_path):
     cleaned.to_csv(csv_path, index=False)
 
     print(f"Removed invalid transforms: {len(removed_frame_ids)}")
-    print(f"Remaining valid transforms: {len(cleaned)}")
+    print(f"Remaining valid transforms: {count}")
     print(f"Removed frame IDs: {format_frame_ranges(removed_frame_ids)}")
 
     return cleaned
@@ -245,24 +255,24 @@ def remove_outliers(csv_path):
 remove_outliers(matched_path)
 
 
-# t_xyz = remove_zero_positions(t_xyz)
+# # t_xyz = remove_zero_positions(t_xyz)
 
-x, y, z = parse_3d_column(t_xyz, "t_position")
-t_xyz.to_csv(t_xyz_path, index=False)
-fig = plt.figure(figsize=(8, 7))
-ax = fig.add_subplot(111, projection="3d")
+# x, y, z = parse_3d_column(t_xyz, "t_position")
+# t_xyz.to_csv(t_xyz_path, index=False)
+# fig = plt.figure(figsize=(8, 7))
+# ax = fig.add_subplot(111, projection="3d")
 
-colors = np.linspace(1, 0, len(x))
+# colors = np.linspace(1, 0, len(x))
 
-ax.scatter(x, y, z, c=colors, cmap="viridis", s=8)
-ax.scatter(x[0], y[0], z[0], c="blue", s=80, marker="o", label="start")
-ax.scatter(x[-1], y[-1], z[-1], c="red", s=80, marker="X", label="finish")
+# ax.scatter(x, y, z, c=colors, cmap="viridis", s=8)
+# ax.scatter(x[0], y[0], z[0], c="blue", s=80, marker="o", label="start")
+# ax.scatter(x[-1], y[-1], z[-1], c="red", s=80, marker="X", label="finish")
 
-ax.set_title("Matched Xi Tip Positions")
-ax.set_xlabel("X")
-ax.set_ylabel("Y")
-ax.set_zlabel("Z")
-ax.legend()
+# ax.set_title("Matched Xi Tip Positions")
+# ax.set_xlabel("X")
+# ax.set_ylabel("Y")
+# ax.set_zlabel("Z")
+# ax.legend()
 
-plt.tight_layout()
-plt.show()
+# plt.tight_layout()
+# plt.show()

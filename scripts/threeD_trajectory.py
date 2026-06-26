@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 # synced_data = pd.read_csv(r"C:\Users\Tracy\Projects\Xi_EE_Pose\data\synced_frame_api.csv", usecols=["manipulator", "field", "data"])
 
 # PSM2_transform = synced_data.loc[(synced_data["manipulator"] == 1) & (synced_data["field"] == "ISI_TIP_TRANSFORM"), "data"].item()
-# print (PSM2_transform)
+# print (PSM2_transform)  
 
 
 
