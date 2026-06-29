@@ -17,7 +17,7 @@ K = loadmat(LEFT_K_PATH)["K_left"].astype(np.float64)
 print(K)
 IMAGE_FOLDER = REPO_ROOT / "checkerboard_images" / "xi_20260616" / "hand_eye_calibration"
 MATCHED_TRANSFORMS_CSV = REPO_ROOT / "data" / "xi_data_0616" / "matched_transforms.csv"
-HAND_EYE_NPZ = REPO_ROOT / "data" / "xi_data_0616" / "xi_hand_eye_0616.npz"
+HAND_EYE_NPZ = REPO_ROOT / "data" / "xi_data_0616" / "xi_hand_eye_0616_translation_first.npz"
 OUTPUT_FOLDER = IMAGE_FOLDER.parent / "solved_base_checkerboard_reprojected"
 ERROR_CSV = OUTPUT_FOLDER / "solved_base_checkerboard_reprojection_errors.csv"
 

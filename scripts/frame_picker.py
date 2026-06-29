@@ -75,11 +75,10 @@ def main(video_path, valid_only=False):
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     IMAGE_DIR.mkdir(parents=True, exist_ok=True)
 
-    # Create CSV with header if it doesn't exist
-    if not CSV_PATH.exists():
-        with open(CSV_PATH, "w", newline="") as f:
-            writer = csv.writer(f)
-            writer.writerow(["frame_number", "image_filename"])
+    # Reset CSV with header at the start of each picker run.
+    with open(CSV_PATH, "w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(["frame_number", "image_filename"])
 
     saved_frame_numbers = set()
     with open(CSV_PATH, "r", newline="") as f:

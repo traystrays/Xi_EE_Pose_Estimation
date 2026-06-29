@@ -19,6 +19,7 @@ OUTPUT_PATH.mkdir(parents=True, exist_ok=True)
 matched_path = OUTPUT_PATH/"frame_transforms.csv"
 
 t_xyz_path = OUTPUT_PATH/"xyz_position_filtered.csv"
+t_a_xyz_path = OUTPUT_PATH/"xyz_position_translation_first.csv"
 
 
 def format_frame_ranges(frame_ids):
@@ -64,7 +65,10 @@ def parse_xi_transform(transform_str):
     t = T[:3,3]
     t_string = f"[{t[0]:.10f} {t[1]:.10f} {t[2]:.10f}]"
 
-    return T, t_string
+    # Xi_ISI_TIP_TRANSFORM format, translation-first:
+    t_a = values[:3]
+
+    return T, t_string, t_a
 
 
 def parse_transform_values(transform_str):
@@ -86,7 +90,12 @@ def format_array(array):
     )
 
 
-def remove_zero_positions(df, col_name="t_position", eps=1e-6):
+def format_position(position):
+    position = np.asarray(position, dtype=np.float64).reshape(3)
+    return f"[{position[0]:.10f} {position[1]:.10f} {position[2]:.10f}]"
+
+
+def remove_zero_positions(df, col_name="t_position", eps=1e-6, max_abs_value=3.0):
     valid_rows = []
     removed_rows = []
 
@@ -95,7 +104,8 @@ def remove_zero_positions(df, col_name="t_position", eps=1e-6):
         is_valid = (
             values.size == 3
             and np.isfinite(values).all()
-            and not np.any(np.abs(values) < eps)
+            # and not np.any(np.abs(values) < eps)
+            # and not np.any(np.abs(values) > max_abs_value)
         )
 
         if is_valid:
@@ -168,19 +178,22 @@ matched = matched.rename(columns={"data": "Raw_Transform"})
 parsed_transforms = []
 invalid_frame_ids = []
 t_rows = []
+t_a_rows = []
 
 for idx, row in matched.iterrows():
     try:
-        T, t_string = parse_xi_transform(row["Raw_Transform"])
+        T, t_string, t_a = parse_xi_transform(row["Raw_Transform"])
 
         parsed_transforms.append(T)
         t_rows.append(t_string)
+        t_a_rows.append(format_position(t_a))
 
     except ValueError:
         parsed_transforms.append(None)
         invalid_frame_ids.append(int(row["frame_id"]))
 
 t_xyz = pd.DataFrame({"t_position": t_rows})
+t_a_xyz = pd.DataFrame({"t_a": t_a_rows})
 
 matched["Transform_Matrix"] = parsed_transforms
 matched = matched.dropna(subset=["Transform_Matrix"]).copy()
@@ -246,33 +259,44 @@ def remove_outliers(csv_path):
     cleaned = df.loc[valid_rows].copy()
     cleaned.to_csv(csv_path, index=False)
 
-    print(f"Removed invalid transforms: {len(removed_frame_ids)}")
-    print(f"Remaining valid transforms: {count}")
-    print(f"Removed frame IDs: {format_frame_ranges(removed_frame_ids)}")
+    # print(f"Removed invalid transforms: {len(removed_frame_ids)}")
+    # print(f"Remaining valid transforms: {count}")
+    # print(f"Removed frame IDs: {format_frame_ranges(removed_frame_ids)}")
+
 
     return cleaned
 
 remove_outliers(matched_path)
 
 
-# # t_xyz = remove_zero_positions(t_xyz)
+def plot_positions(position_df, col_name, title):
+    x, y, z = parse_3d_column(position_df, col_name)
 
-# x, y, z = parse_3d_column(t_xyz, "t_position")
-# t_xyz.to_csv(t_xyz_path, index=False)
-# fig = plt.figure(figsize=(8, 7))
-# ax = fig.add_subplot(111, projection="3d")
+    fig = plt.figure(figsize=(8, 7))
+    ax = fig.add_subplot(111, projection="3d")
 
-# colors = np.linspace(1, 0, len(x))
+    colors = np.linspace(1, 0, len(x))
 
-# ax.scatter(x, y, z, c=colors, cmap="viridis", s=8)
-# ax.scatter(x[0], y[0], z[0], c="blue", s=80, marker="o", label="start")
-# ax.scatter(x[-1], y[-1], z[-1], c="red", s=80, marker="X", label="finish")
+    ax.scatter(x, y, z, c=colors, cmap="viridis", s=8)
+    ax.scatter(x[0], y[0], z[0], c="blue", s=80, marker="o", label="start")
+    ax.scatter(x[-1], y[-1], z[-1], c="red", s=80, marker="X", label="finish")
 
-# ax.set_title("Matched Xi Tip Positions")
-# ax.set_xlabel("X")
-# ax.set_ylabel("Y")
-# ax.set_zlabel("Z")
-# ax.legend()
+    ax.set_title(title)
+    ax.set_xlabel("X")
+    ax.set_ylabel("Y")
+    ax.set_zlabel("Z")
+    ax.legend()
 
-# plt.tight_layout()
-# plt.show()
+    plt.tight_layout()
+
+
+# t_xyz = remove_zero_positions(t_xyz)
+t_a_xyz = remove_zero_positions(t_a_xyz, col_name="t_a")
+
+t_xyz.to_csv(t_xyz_path, index=False)
+t_a_xyz.to_csv(t_a_xyz_path, index=False)
+
+plot_positions(t_xyz, "t_position", "Matched Xi Tip Positions, row-major")
+plot_positions(t_a_xyz, "t_a", "Matched Xi Tip Positions, translation-first")
+
+plt.show()

@@ -20,7 +20,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 DATA_DIR = REPO_ROOT / "data" / "si_data_0612"
 
 SAVED_FRAMES_CSV = DATA_DIR / "saved_frames.csv"
-TRANSFORM_CSV = DATA_DIR / "hand_eye_calibration_data_METERS.csv"
+TRANSFORM_CSV  = Path(r"C:\Users\Tracy\Documents\2026 RCL UBC\20260616_OR_Xi_checkerboard\20260616_183444.024\KinManip1_20260616_183444.049_2026-06-16_18.csv")
 OUTPUT_CSV = DATA_DIR / "matched_transforms.csv"
 GRIPPER_TRANSFORMS_MAT = Path(__file__).resolve().with_name("gripper_transforms.mat")
 
@@ -77,7 +77,7 @@ def main():
     transform_array = np.array(
         [parse_transform_string(transform_str) for transform_str in merged["Transform"]]
     )
-    
+
     sio.savemat(GRIPPER_TRANSFORMS_MAT, {"gripperTforms": transform_array})
 
     print(f"Saved matched transforms: {OUTPUT_CSV}")

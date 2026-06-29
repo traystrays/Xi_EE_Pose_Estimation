@@ -24,6 +24,7 @@ A_NPY_PATH = DATA_DIR / "A_matrices_METERS.npy"
 A_CSV_PATH = DATA_DIR / "A_matrices_METERS.csv"
 POSE_CSV_PATH = DATA_DIR / "checkerboard_pose_results.csv"
 OUTPUT_NPZ = DATA_DIR / "xi_hand_eye_0616.npz"
+TRANSFORM_FORMAT_REVIEW_CSV = DATA_DIR / "xi_transform_format_review.csv"
 
 CHECKERBOARD_OUTPUT_DIR = IMAGE_FOLDER.parent / "checkerboard_pose_result"
 
@@ -47,56 +48,94 @@ def parse_numbers(transform_str):
     return np.array(numbers, dtype=np.float64)
 
 
-def parse_xi_raw_transform(transform_str):
+def build_xi_transform_from_values(values, layout):
+    T = np.eye(4, dtype=np.float64)
+
+    if layout == "row_major_3x4":
+        T_temp = values.reshape(3, 4)
+        T[:3, :3] = T_temp[:, :3]
+        T[:3, 3] = T_temp[:, 3]
+    elif layout == "translation_first":
+        T[:3, 3] = values[:3]
+        T[:3, :3] = values[3:].reshape(3, 3)
+    else:
+        raise ValueError(f"Unknown Xi transform layout: {layout}")
+
+    return T
+
+
+def transform_quality(T):
+    R = T[:3, :3]
+    t = T[:3, 3]
+
+    if not np.isfinite(T).all():
+        return {
+            "det_R": np.nan,
+            "orth_error": np.nan,
+            "translation_norm": np.nan,
+            "is_valid_rigid": False,
+            "quality_score": np.inf,
+        }
+
+    det_R = float(np.linalg.det(R))
+    orth_error = float(np.linalg.norm(R.T @ R - np.eye(3)))
+    translation_norm = float(np.linalg.norm(t))
+    is_valid_rigid = (
+        np.isclose(det_R, 1.0, atol=1e-3)
+        and orth_error <= 1e-3
+        and translation_norm <= MAX_TRANSLATION_NORM_M
+        and translation_norm >= 1e-6
+    )
+
+    return {
+        "det_R": det_R,
+        "orth_error": orth_error,
+        "translation_norm": translation_norm,
+        "is_valid_rigid": bool(is_valid_rigid),
+        "quality_score": abs(det_R - 1.0) + orth_error,
+    }
+
+
+def parse_xi_raw_transform(transform_str, layout="translation_first", validate=True):
     values = parse_numbers(transform_str)
 
     if values.size != 12:
         raise ValueError(f"Expected 12 Xi transform values, got {values.size}")
 
-    candidates = []
+    if layout == "auto":
+        candidates = []
+        for layout_name in ("row_major_3x4", "translation_first"):
+            T_candidate = build_xi_transform_from_values(values, layout_name)
+            quality = transform_quality(T_candidate)
+            candidates.append((quality["quality_score"], layout_name, T_candidate))
 
-    row_major = np.eye(4, dtype=np.float64)
-    T_temp = values.reshape(3, 4)
-    row_major[:3, :3] = T_temp[:, :3]
-    row_major[:3, 3] = T_temp[:, 3]
-    candidates.append(("row_major_3x4", row_major))
+        _, _, T = min(candidates, key=lambda item: item[0])
+    else:
+        T = build_xi_transform_from_values(values, layout)
+        print(T)
+        print("t")
+        print(T[:3,3])
+        print("R")
+        print(T[:3,:3])
 
-    translation_first = np.eye(4, dtype=np.float64)
-    translation_first[:3, 3] = values[:3]
-    translation_first[:3, :3] = values[3:].reshape(3, 3)
-    candidates.append(("translation_first", translation_first))
-
-    scored = []
-    for layout_name, T in candidates:
-        R = T[:3, :3]
-        t = T[:3, 3]
-        det_error = abs(np.linalg.det(R) - 1.0)
-        orth_error = np.linalg.norm(R.T @ R - np.eye(3))
-        translation_norm = np.linalg.norm(t)
-        score = det_error + orth_error
-        scored.append((score, layout_name, T, translation_norm))
-
-    score, layout_name, T, translation_norm = min(scored, key=lambda item: item[0])
-    validate_rigid_transform(T)
-
-    if translation_norm < 1e-6:
-        raise ValueError(f"Translation is effectively zero using {layout_name}")
+    if validate:
+        validate_rigid_transform(T)
 
     return T
 
 
-def parse_transform_string(transform_str):
-    values = parse_numbers(transform_str)
+# def parse_transform_string(transform_str):
+#     values = parse_numbers(transform_str)
 
-    if values.size == 16:
-        T = values.reshape(4, 4)
-        validate_rigid_transform(T)
-        return T
+#     if values.size == 16:
+#         T = values.reshape(4, 4)
+#         validate_rigid_transform(T)
+#         return T
 
-    if values.size == 12:
-        return parse_xi_raw_transform(transform_str)
+#     if values.size == 12:
+#         return parse_xi_raw_transform(transform_str)
 
-    raise ValueError(f"Expected 12 or 16 transform values, got {values.size}")
+#     raise ValueError(f"Expected 12 or 16 transform values, got {values.size}")
 
 
 def validate_rigid_transform(T):
@@ -128,6 +167,47 @@ def flatten_matrix_record(prefix, T):
         for c in range(4):
             record[f"{prefix}{r}{c}"] = T[r, c]
     return record
+
+
+def save_transform_format_review():
+    df = pd.read_csv(MATCHED_TRANSFORMS_CSV, usecols=["frame_id", "Raw_Transform"])
+    rows = []
+
+    for _, row in df.iterrows():
+        frame_id = int(row["frame_id"])
+        raw_transform = row["Raw_Transform"]
+
+        record = {
+            "frame_id": frame_id,
+            "Raw_Transform": raw_transform,
+        }
+
+        try:
+            values = parse_numbers(raw_transform)
+            if values.size != 12:
+                raise ValueError(f"Expected 12 values, got {values.size}")
+
+            for layout in ("row_major_3x4", "translation_first"):
+                T = build_xi_transform_from_values(values, layout)
+                quality = transform_quality(T)
+                record[f"{layout}_Transform"] = np.array2string(
+                    T,
+                    precision=10,
+                    suppress_small=False,
+                    separator=" ",
+                )
+                record[f"{layout}_det_R"] = quality["det_R"]
+                record[f"{layout}_orth_error"] = quality["orth_error"]
+                record[f"{layout}_translation_norm"] = quality["translation_norm"]
+                record[f"{layout}_is_valid_rigid"] = quality["is_valid_rigid"]
+
+        except ValueError as exc:
+            record["parse_error"] = str(exc)
+
+        rows.append(record)
+
+    pd.DataFrame(rows).to_csv(TRANSFORM_FORMAT_REVIEW_CSV, index=False)
+    print(f"Saved transform format review: {TRANSFORM_FORMAT_REVIEW_CSV}")
 
 
 def image_path_for_row(row):
@@ -264,7 +344,7 @@ def B_matrix():
     return B_matrices
 
 
-def A_matrix():
+def A_matrix(layout="translation_first", validate=True):
     """
     Build robot-motion A matrices for Xi 0616.
     ROBOT ARM PORTION
@@ -274,11 +354,22 @@ def A_matrix():
     robot = pd.read_csv(MATCHED_TRANSFORMS_CSV, usecols=["frame_id", "Raw_Transform"])
     camera_pairs = pd.read_csv(B_CSV_PATH, usecols=["from_frame", "to_frame"])
 
+    if layout == "auto":
+        A_csv_path = A_CSV_PATH
+        A_npy_path = A_NPY_PATH
+    else:
+        A_csv_path = DATA_DIR / f"A_matrices_{layout}_METERS.csv"
+        A_npy_path = DATA_DIR / f"A_matrices_{layout}_METERS.npy"
+
     robot_by_frame = {}
     for _, row in robot.iterrows():
         frame_id = int(row["frame_id"])
         try:
-            robot_by_frame[frame_id] = parse_xi_raw_transform(row["Raw_Transform"])
+            robot_by_frame[frame_id] = parse_xi_raw_transform(
+                row["Raw_Transform"],
+                layout=layout,
+                validate=validate,
+            )
         except ValueError as exc:
             print(f"Frame {frame_id}: invalid robot transform skipped: {exc}")
 
@@ -311,14 +402,14 @@ def A_matrix():
         raise RuntimeError("No A matrices were computed.")
 
     A_matrices = np.array(A_matrices)
-    np.save(A_NPY_PATH, A_matrices)
-    pd.DataFrame(A_records).to_csv(A_CSV_PATH, index=False)
+    np.save(A_npy_path, A_matrices)
+    pd.DataFrame(A_records).to_csv(A_csv_path, index=False)
 
-    print(f"Saved A matrices: {A_CSV_PATH}")
-    print(f"Saved A numpy array: {A_NPY_PATH}")
+    print(f"Saved A matrices: {A_csv_path}")
+    print(f"Saved A numpy array: {A_npy_path}")
     print(f"A_matrices shape: {A_matrices.shape}")
 
-    return A_matrices
+    return A_matrices, A_csv_path, A_npy_path
 
 
 def project_to_rotation(R_mat):
@@ -341,7 +432,7 @@ def parse_pose_transform(transform_str):
     return values.reshape(4, 4)
 
 
-def load_absolute_pose_maps():
+def load_absolute_pose_maps(layout="translation_first", validate=True):
     robot_df = pd.read_csv(MATCHED_TRANSFORMS_CSV, usecols=["frame_id", "Raw_Transform"])
     pose_df = pd.read_csv(POSE_CSV_PATH, usecols=["frame_id", "T_cam_board"])
 
@@ -349,7 +440,11 @@ def load_absolute_pose_maps():
     for _, row in robot_df.iterrows():
         frame_id = int(row["frame_id"])
         try:
-            base_T_ecm_by_frame[frame_id] = parse_xi_raw_transform(row["Raw_Transform"])
+            base_T_ecm_by_frame[frame_id] = parse_xi_raw_transform(
+                row["Raw_Transform"],
+                layout=layout,
+                validate=validate,
+            )
         except ValueError as exc:
             print(f"Frame {frame_id}: skipped base_T_ECM for consistency check: {exc}")
 
@@ -393,8 +488,16 @@ def analyze_transform_deviation(T_list):
     return T_mean, np.array(translation_errors), np.array(rotation_errors_deg)
 
 
-def find_base_T_checker(ECM_T_camera, matched_keys):
-    base_T_ecm_by_frame, camera_T_checker_by_frame = load_absolute_pose_maps()
+def find_base_T_checker(
+    ECM_T_camera,
+    matched_keys,
+    layout="translation_first",
+    validate=True,
+):
+    base_T_ecm_by_frame, camera_T_checker_by_frame = load_absolute_pose_maps(
+        layout=layout,
+        validate=validate,
+    )
 
     frame_ids = sorted(
         {
@@ -440,7 +543,10 @@ def find_base_T_checker(ECM_T_camera, matched_keys):
         analyze_transform_deviation(base_T_checker_list)
     )
 
-    base_checker_csv = DATA_DIR / "base_T_checkerboard_per_frame.csv"
+    if layout == "auto":
+        base_checker_csv = DATA_DIR / "base_T_checkerboard_per_frame.csv"
+    else:
+        base_checker_csv = DATA_DIR / f"base_T_checkerboard_per_frame_{layout}.csv"
     pd.DataFrame(base_T_checker_rows).to_csv(base_checker_csv, index=False)
 
     print("\nBase_T_Checkerboard consistency")
@@ -469,34 +575,43 @@ def find_base_T_checker(ECM_T_camera, matched_keys):
         rotation_errors_deg,
     )
 
-if __name__ == "__main__":
 
-    print(DATA_DIR)
-    B_matrix()
-    A_matrix()
+def solve_for_layout(layout="translation_first", validate=True):
+    print(f"\n=== Solving Xi hand-eye with layout: {layout} ===")
+    print(f"Robot transform validation: {validate}")
 
-    A_keys, A_list = load_transform_list(A_CSV_PATH)
+    _, a_csv_path, _ = A_matrix(layout=layout, validate=validate)
+
+    A_keys, A_list = load_transform_list(a_csv_path)
     B_keys, B_list = load_transform_list(B_CSV_PATH)
 
     matched_keys, A_list, B_list = match_A_B(A_keys, A_list, B_keys, B_list)
 
+    print(f"Matched A/B pairs for {layout}: {len(matched_keys)}")
     print(matched_keys)
 
     ECM_T_Camera, R_X, t_X, info = solve_X(A_list, B_list)
 
+    print(f"\nECM_T_Camera for {layout}:")
     print(ECM_T_Camera)
+    print(f"t_X norm for {layout}: {np.linalg.norm(t_X):.6f} m")
+    print(info)
 
     (
         mean_base_T_checker,
         base_T_checker_list,
         base_T_checker_translation_errors,
         base_T_checker_rotation_errors_deg,
-    ) = find_base_T_checker(ECM_T_Camera, matched_keys)
+    ) = find_base_T_checker(
+        ECM_T_Camera,
+        matched_keys,
+        layout=layout,
+        validate=validate,
+    )
 
-    print(mean_base_T_checker)
-
+    output_npz = DATA_DIR / f"xi_hand_eye_0616_{layout}.npz"
     np.savez(
-        OUTPUT_NPZ,
+        output_npz,
         X=ECM_T_Camera,
         R_X=R_X,
         t_X=t_X,
@@ -506,4 +621,38 @@ if __name__ == "__main__":
         base_T_checker_translation_errors=base_T_checker_translation_errors,
         base_T_checker_rotation_errors_deg=base_T_checker_rotation_errors_deg,
     )
-    print(f"Saved hand-eye result: {OUTPUT_NPZ}")
+    print(f"Saved hand-eye result for {layout}: {output_npz}")
+    print("ECM_T_Camera incoming...")
+    print(np.array2string(ECM_T_Camera, precision = 8, suppress_small=True))
+    return {
+        "layout": layout,
+        "output_npz": output_npz,
+        "matched_pair_count": len(matched_keys),
+        "translation_rms": float(
+            np.sqrt(np.mean(base_T_checker_translation_errors ** 2))
+        ),
+        "translation_mean": float(np.mean(base_T_checker_translation_errors)),
+        "translation_max": float(np.max(base_T_checker_translation_errors)),
+        "rotation_rms_deg": float(
+            np.sqrt(np.mean(base_T_checker_rotation_errors_deg ** 2))
+        ),
+        "rotation_mean_deg": float(np.mean(base_T_checker_rotation_errors_deg)),
+        "rotation_max_deg": float(np.max(base_T_checker_rotation_errors_deg)),
+        "X_translation_norm": float(np.linalg.norm(t_X)),
+    }
+
+if __name__ == "__main__":
+
+    print(DATA_DIR)
+    B_matrix()
+    save_transform_format_review()
+
+    summaries = [
+        solve_for_layout("translation_first", validate=True),
+        # solve_for_layout("row_major_3x4", validate=False),
+    ]
+
+    summary_csv = DATA_DIR / "xi_hand_eye_format_comparison.csv"
+    pd.DataFrame(summaries).to_csv(summary_csv, index=False)
+    print(f"\nSaved format comparison summary: {summary_csv}")
+
