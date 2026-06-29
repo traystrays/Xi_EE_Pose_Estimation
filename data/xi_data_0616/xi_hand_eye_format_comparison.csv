@@ -1,0 +1,2 @@
+layout,output_npz,matched_pair_count,translation_rms,translation_mean,translation_max,rotation_rms_deg,rotation_mean_deg,rotation_max_deg,X_translation_norm
+translation_first,C:\Users\Tracy\Projects\Xi_EE_Pose\data\xi_data_0616\xi_hand_eye_0616_translation_first.npz,37,0.0024091926440114072,0.0019613343038487273,0.0061105062140029255,1.5826674997052195,1.3717881652318917,3.622355652114989,0.00461965903958765
