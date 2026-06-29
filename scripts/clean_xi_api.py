@@ -10,13 +10,13 @@ import matplotlib.pyplot as plt
 # Change path for input and output files
 
 # manip 1 -> ECM in this case, both absolute paths 
-input_data = Path(r"C:\Users\Tracy\Documents\2026 RCL UBC\20260616_OR_Xi_checkerboard\20260616_183444.024\KinManip1_20260616_183444.049_2026-06-16_18.csv")
-video_data = Path(r"C:\Users\Tracy\Documents\2026 RCL UBC\20260616_OR_Xi_checkerboard\video_stream_1_20260616_183326_timestamps.txt")
+input_data = Path(r"C:\Users\Tracy\Documents\2026 RCL UBC\20260616_OR_Xi_EE\20260616_185054.606\KinManip2_20260616_185054.633_2026-06-16_18.csv")
+video_data = Path(r"C:\Users\Tracy\Documents\2026 RCL UBC\20260616_OR_Xi_EE\video_stream_1_20260616_185106_timestamps.txt")
 REPO_ROOT = Path(__file__).resolve().parents[1]
-OUTPUT_PATH = REPO_ROOT/"data"/"xi_data_0616"
+OUTPUT_PATH = REPO_ROOT/"data"/"xi_ee_0616"
 OUTPUT_PATH.mkdir(parents=True, exist_ok=True)
 
-matched_path = OUTPUT_PATH/"frame_transforms.csv"
+matched_path = OUTPUT_PATH/"EE_transforms.csv"
 
 t_xyz_path = OUTPUT_PATH/"xyz_position_filtered.csv"
 t_a_xyz_path = OUTPUT_PATH/"xyz_position_translation_first.csv"
@@ -66,6 +66,7 @@ def parse_xi_transform(transform_str):
     t_string = f"[{t[0]:.10f} {t[1]:.10f} {t[2]:.10f}]"
 
     # Xi_ISI_TIP_TRANSFORM format, translation-first:
+    # [tx ty tz R00 R01 R02 R10 R11 R12 R20 R21 R22]
     t_a = values[:3]
 
     return T, t_string, t_a
@@ -104,8 +105,8 @@ def remove_zero_positions(df, col_name="t_position", eps=1e-6, max_abs_value=3.0
         is_valid = (
             values.size == 3
             and np.isfinite(values).all()
-            # and not np.any(np.abs(values) < eps)
-            # and not np.any(np.abs(values) > max_abs_value)
+            and not np.any(np.abs(values) < eps)
+            and not np.any(np.abs(values) > max_abs_value)
         )
 
         if is_valid:
