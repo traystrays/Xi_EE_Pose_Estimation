@@ -7,6 +7,7 @@ import pandas as pd
 from scipy.io import loadmat
 
 from clean_si_api import estimate_checkerboard_pose, checkerboard_inner_corners
+from xi_hand_eye_calibration_0616 import parse_xi_raw_transform
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -30,19 +31,7 @@ DIST_COEFFS = np.array(
     dtype=np.float64,
 )
 
-DISPLAY_IMAGES = True
-
-
-def parse_transform_string(transform_str):
-    values = np.fromstring(
-        transform_str.replace("[", " ").replace("]", " ").replace(",", " "),
-        sep=" ",
-    )
-
-    if values.size != 16:
-        raise ValueError(f"Expected 16 transform values, got {values.size}")
-
-    return values.reshape(4, 4)
+DISPLAY_IMAGES = False
 
 
 def project_to_rotation(R_mat):
@@ -144,7 +133,12 @@ def main():
         _, _, _, detected_corners = observed_pose
         detected_corners = detected_corners.reshape(-1, 2)
 
-        base_T_gripper = parse_transform_string(row["Transform"])
+        try:
+            base_T_gripper = parse_xi_raw_transform(row["Raw_Transform"])
+        except ValueError as exc:
+            print(f"frame {frame_id}: invalid robot transform; skipping: {exc}")
+            continue
+
         base_T_camera = base_T_gripper @ ECM_T_camera
         camera_T_base = np.linalg.inv(base_T_camera)
         camera_T_checkerboard_pred = camera_T_base @ base_T_checkerboard
