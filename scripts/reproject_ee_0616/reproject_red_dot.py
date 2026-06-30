@@ -260,6 +260,6 @@ EE_in_camera_to_save["EE_position_in_camera"] = EE_in_camera_to_save[
 ].apply(format_array)
 EE_in_camera_to_save.to_csv(OUTPUT_PATH / "EE_in_camera.csv", index=False)
 
-save_red_dot_video(VIDEO_PATH, EE_in_camera, OUTPUT_VIDEO)
+# save_red_dot_video(VIDEO_PATH, EE_in_camera, OUTPUT_VIDEO)
 
 print(EE_in_camera.head())
