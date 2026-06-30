@@ -96,7 +96,7 @@ def format_position(position):
     return f"[{position[0]:.10f} {position[1]:.10f} {position[2]:.10f}]"
 
 
-def remove_zero_positions(df, col_name="t_position", eps=1e-6, max_abs_value=3.0):
+def remove_zero_positions(df, col_name="t_position", eps=1e-6, max_abs_value=10.0):
     valid_rows = []
     removed_rows = []
 
@@ -105,7 +105,6 @@ def remove_zero_positions(df, col_name="t_position", eps=1e-6, max_abs_value=3.0
         is_valid = (
             values.size == 3
             and np.isfinite(values).all()
-            and not np.any(np.abs(values) < eps)
             and not np.any(np.abs(values) > max_abs_value)
         )
 
@@ -241,12 +240,12 @@ def remove_outliers(csv_path):
 
 
             is_valid = (
-                np.isfinite(Rotation).all()
-                and np.isfinite(Translation).all()
-                and not np.any(Rotation > 1)
-                and not np.any(np.abs(Rotation) < 1e-6) # to remove values < 1e-6
-                and not np.any(Translation == 0) # to remove values = 0
-            )
+                np.isfinite(Rotation).all())
+            #     # and np.isfinite(Translation).all()
+            #     # and not np.any(Rotation > 1)
+            #     # and not np.any(np.abs(Rotation) < 1e-6) # to remove values < 1e-6
+            #     # and not np.any(Translation == 0) # to remove values = 0
+            # )
 
             if is_valid:
                 valid_rows.append(idx)
@@ -267,7 +266,7 @@ def remove_outliers(csv_path):
 
     return cleaned
 
-remove_outliers(matched_path)
+# remove_outliers(matched_path)
 
 
 def plot_positions(position_df, col_name, title):

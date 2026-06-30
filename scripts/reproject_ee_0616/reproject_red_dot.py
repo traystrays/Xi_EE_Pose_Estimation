@@ -109,7 +109,7 @@ def project_camera_point_to_pixel(point_camera, K, image_width, image_height):
 
 def find_EE_in_camera(EE_transforms, ECM_transforms, ECM_T_camera):
     """
-    Compute EE pose in the camera frame for each matched frame.
+    Compute EE pose in the camera frame.
 
     Assumes:
         Base_T_EE     comes from EE_file
@@ -129,6 +129,7 @@ def find_EE_in_camera(EE_transforms, ECM_transforms, ECM_T_camera):
         for _, row in ECM_transforms.iterrows()
     }
 
+    # check that same frame are in both ee and ecm
     common_frame_ids = sorted(set(ee_by_frame) & set(ecm_by_frame))
     rows = []
 
@@ -137,8 +138,9 @@ def find_EE_in_camera(EE_transforms, ECM_transforms, ECM_T_camera):
         Base_T_ECM = ecm_by_frame[frame_id]
 
         try:
-            Base_T_camera = Base_T_ECM @ ECM_T_camera
-            Camera_T_EE = np.linalg.inv(Base_T_camera) @ Base_T_EE
+            Cam_T_ECM = np.linalg.inv(ECM_T_camera)
+            ECM_T_Base = np.linalg.inv(Base_T_ECM)
+            Camera_T_EE = Cam_T_ECM @ ECM_T_Base @ Base_T_EE
         except np.linalg.LinAlgError as exc:
             print(f"frame {frame_id}: cannot invert Base_T_camera: {exc}")
             continue
@@ -146,6 +148,8 @@ def find_EE_in_camera(EE_transforms, ECM_transforms, ECM_T_camera):
         rows.append(
             {
                 "frame_id": frame_id,
+                "Base_T_EE": Base_T_EE,
+                "Base_T_ECM": Base_T_ECM,
                 "Camera_T_EE": Camera_T_EE,
                 "EE_position_in_camera": Camera_T_EE[:3, 3],
             }
