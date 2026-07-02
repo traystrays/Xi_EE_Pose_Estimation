@@ -6,19 +6,21 @@ import sys
 import cv2
 from scipy.io import loadmat
 
+
 SCRIPTS_DIR = Path(__file__).resolve().parents[1]
 sys.path.append(str(SCRIPTS_DIR))
 
 from xi_hand_eye_calibration_0616 import parse_xi_raw_transform
+from clean_xi_api import plot_positions
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
  
 HAND_EYE_NPZ = REPO_ROOT / "data" / "xi_data_0616" / "xi_hand_eye_0616_translation_first.npz"
 input_data = Path(r"C:\Users\Tracy\Documents\2026 RCL UBC\20260616_OR_Xi_EE\20260616_185054.606\KinManip2_20260616_185054.633_2026-06-16_18.csv")
 VIDEO_PATH = Path(r"C:\Users\Tracy\Documents\2026 RCL UBC\20260616_OR_Xi_EE\video_stream_1_20260616_185106.mp4")
-video_ts_data = Path(r"C:\Users\Tracy\Documents\2026 RCL UBC\20260616_OR_Xi_EE\video_stream_1_20260616_185106.mp4")
+video_ts_data = Path(r"C:\Users\Tracy\Documents\2026 RCL UBC\20260616_OR_Xi_EE\video_stream_1_20260616_185106_timestamps.txt")
 
-OUTPUT_PATH = REPO_ROOT/"data"/"xi_ee_0616"
+OUTPUT_PATH = REPO_ROOT/"data"/"xi_ee_0616_v2"
 OUTPUT_PATH.mkdir(parents=True, exist_ok=True)
 
 EE_file = OUTPUT_PATH/"EE_transforms.csv"
@@ -29,6 +31,7 @@ OUTPUT_VIDEO = OUTPUT_PATH / "EE_red_dot_projection.mp4"
 ## CAMERA PARAMETERS
 LEFT_K_PATH = Path(r"C:\Users\Tracy\Documents\MATLAB\20260616_xi_data\K_left.mat")
 K = loadmat(LEFT_K_PATH)["K_left"].astype(np.float64)
+
 DIST_COEFFS = np.array(
     [-0.002994058031627, 0.013201245121718, 0.0, 0.0, 0.0],
     dtype=np.float64,
@@ -36,6 +39,7 @@ DIST_COEFFS = np.array(
 solved = np.load(HAND_EYE_NPZ)
 ECM_T_camera = solved["X"]
 
+print(ECM_T_camera)
 
 
 
@@ -91,11 +95,68 @@ def get_video_size(video_path):
     return width, height
 
 
-def project_camera_point_to_pixel(point_camera, K, image_width, image_height):
+def find_active_image_roi(
+    video_path,
+    sample_count=9,
+    black_threshold=8,
+    min_nonblack_fraction=0.05,
+):
+    """Find the non-black image rectangle in full-frame pixel coordinates."""
+    cap = cv2.VideoCapture(str(video_path))
+    if not cap.isOpened():
+        raise RuntimeError(f"Could not open video: {video_path}")
+
+    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    row_votes = np.zeros(height, dtype=np.int32)
+    column_votes = np.zeros(width, dtype=np.int32)
+    frames_read = 0
+
+    for frame_idx in np.linspace(
+        0, max(frame_count - 1, 0), sample_count, dtype=int
+    ):
+        cap.set(cv2.CAP_PROP_POS_FRAMES, int(frame_idx))
+        success, frame = cap.read()
+        if not success:
+            continue
+
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        row_votes += (gray > black_threshold).mean(axis=1) > min_nonblack_fraction
+        column_votes += (gray > black_threshold).mean(axis=0) > min_nonblack_fraction
+        frames_read += 1
+
+    cap.release()
+
+    if frames_read == 0:
+        raise RuntimeError(f"Could not read frames from video: {video_path}")
+
+    required_votes = frames_read // 2 + 1
+    active_rows = np.flatnonzero(row_votes >= required_votes)
+    active_columns = np.flatnonzero(column_votes >= required_votes)
+    if active_rows.size == 0 or active_columns.size == 0:
+        print("Could not detect a non-black image region; using the full frame")
+        return 0, 0, width, height
+
+    left = int(active_columns[0])
+    top = int(active_rows[0])
+    right = int(active_columns[-1] + 1)
+    bottom = int(active_rows[-1] + 1)
+    print(
+        f"Active image ROI: x={left}:{right}, y={top}:{bottom} "
+        f"({right - left} x {bottom - top} pixels)"
+    )
+    return left, top, right, bottom
+
+
+def project_camera_point_to_pixel(point_camera, K, active_roi):
     X, Y, Z = np.asarray(point_camera, dtype=np.float64).reshape(3)
 
     if not np.isfinite([X, Y, Z]).all() or abs(Z) < 1e-9:
         return np.nan, np.nan, np.nan, np.nan, False
+    
+    # #### EDIT ALERT, EDIT ALERT
+    # Z = Z / 2.0
 
     x_norm = X / Z
     y_norm = Y / Z
@@ -103,7 +164,8 @@ def project_camera_point_to_pixel(point_camera, K, image_width, image_height):
     u = K[0, 0] * x_norm + K[0, 2]
     v = K[1, 1] * y_norm + K[1, 2]
 
-    in_image = 0 <= u < image_width and 0 <= v < image_height
+    left, top, right, bottom = active_roi
+    in_image = left <= u < right and top <= v < bottom
     return x_norm, y_norm, u, v, bool(in_image)
 
 
@@ -140,7 +202,9 @@ def find_EE_in_camera(EE_transforms, ECM_transforms, ECM_T_camera):
         try:
             Cam_T_ECM = np.linalg.inv(ECM_T_camera)
             ECM_T_Base = np.linalg.inv(Base_T_ECM)
-            Camera_T_EE = Cam_T_ECM @ ECM_T_Base @ Base_T_EE
+            OLD_Camera_T_EE = Cam_T_ECM @ ECM_T_Base @ Base_T_EE
+
+            Camera_T_EE = Cam_T_ECM @ Base_T_EE
         except np.linalg.LinAlgError as exc:
             print(f"frame {frame_id}: cannot invert Base_T_camera: {exc}")
             continue
@@ -152,6 +216,8 @@ def find_EE_in_camera(EE_transforms, ECM_transforms, ECM_T_camera):
                 "Base_T_ECM": Base_T_ECM,
                 "Camera_T_EE": Camera_T_EE,
                 "EE_position_in_camera": Camera_T_EE[:3, 3],
+                "OLD_Camera_T_EE": OLD_Camera_T_EE,
+                "OLD_EE_position_in_camera": OLD_Camera_T_EE[:3, 3],
             }
         )
 
@@ -166,14 +232,13 @@ def find_EE_in_camera(EE_transforms, ECM_transforms, ECM_T_camera):
     return pd.DataFrame(rows)
 
 
-def add_projected_pixels(df, K, image_width, image_height):
+def add_projected_pixels(df, K, active_roi):
     rows = []
     for _, row in df.iterrows():
         x_norm, y_norm, u, v, in_image = project_camera_point_to_pixel(
-            row["EE_position_in_camera"],
+            row["EE_position_in_camera"], 
             K,
-            image_width,
-            image_height,
+            active_roi,
         )
         rows.append(
             {
@@ -246,10 +311,11 @@ def save_red_dot_video(video_path, projections_df, output_video):
 
 
 image_width, image_height = get_video_size(VIDEO_PATH)
+active_roi = find_active_image_roi(VIDEO_PATH)
 EE_transforms = load_xi_transform_file(EE_file)
 ECM_transforms = load_xi_transform_file(ECM_file)
 EE_in_camera = find_EE_in_camera(EE_transforms, ECM_transforms, ECM_T_camera)
-EE_in_camera = add_projected_pixels(EE_in_camera, K, image_width, image_height)
+EE_in_camera = add_projected_pixels(EE_in_camera, K, active_roi)
 
 EE_in_camera_to_save = EE_in_camera.copy()
 EE_in_camera_to_save["Camera_T_EE"] = EE_in_camera_to_save["Camera_T_EE"].apply(
@@ -260,6 +326,14 @@ EE_in_camera_to_save["EE_position_in_camera"] = EE_in_camera_to_save[
 ].apply(format_array)
 EE_in_camera_to_save.to_csv(OUTPUT_PATH / "EE_in_camera.csv", index=False)
 
-# save_red_dot_video(VIDEO_PATH, EE_in_camera, OUTPUT_VIDEO)
+save_red_dot_video(VIDEO_PATH, EE_in_camera, OUTPUT_VIDEO)
 
 print(EE_in_camera.head())
+
+plot_positions(
+    EE_in_camera_to_save,
+    "EE_position_in_camera",
+    "EE position in camera frame",
+)
+
+plt.show()

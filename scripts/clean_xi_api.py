@@ -11,13 +11,13 @@ from matplotlib.animation import FuncAnimation, PillowWriter
 # Change path for input and output files
 
 # manip 1 -> ECM in this case, both absolute paths 
-input_data = Path(r"C:\Users\Tracy\Documents\2026 RCL UBC\20260616_OR_Xi_EE\20260616_185054.606\KinManip2_20260616_185054.633_2026-06-16_18.csv")
-video_data = Path(r"C:\Users\Tracy\Documents\2026 RCL UBC\20260616_OR_Xi_EE\video_stream_1_20260616_185106_timestamps.txt")
+input_data = Path(r"C:\Users\Tracy\Documents\2026 RCL UBC\20260616_OR_Xi_EE\20260616_185054.606\KinManip1_20260616_185054.618_2026-06-16_18.csv") 
+video_data = Path(r"C:\Users\Tracy\Documents\2026 RCL UBC\20260616_OR_Xi_EE\video_stream_1_20260616_185106_timestamps.txt") 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-OUTPUT_PATH = REPO_ROOT/"data"/"xi_ee_0616"
+OUTPUT_PATH = REPO_ROOT/"data"/"xi_ee_0616_v2"
 OUTPUT_PATH.mkdir(parents=True, exist_ok=True)
 
-matched_path = OUTPUT_PATH/"EE_transforms.csv"
+matched_path = OUTPUT_PATH/"ECM_transforms.csv"
 
 t_xyz_path = OUTPUT_PATH/"xyz_position_filtered.csv"
 t_a_xyz_path = OUTPUT_PATH/"xyz_position_translation_first.csv"
@@ -268,8 +268,8 @@ def remove_outliers(csv_path):
             is_valid = (
                 np.isfinite(Rotation).all()
                 and np.isfinite(Translation).all()
-                and np.all(np.abs(Rotation) < 1.0)
-                # and np.all(np.abs(Translation) <= 10)
+                and np.all(np.abs(Rotation) <= 1.0)
+                and np.all(np.abs(Translation) <= 10)
                 and zero_count < 2
                 )
 
@@ -445,4 +445,4 @@ plot_positions(cleaned, "Translation", "Matched Xi Tip Positions, translation-fi
 plot_positions(wrong_t_xyz, "wrong_t", "Matched Xi Tip Positions, row-major translation")
 # animate_translation_over_time(cleaned, video_frame, translation_animation_path)
 
-plt.show()
+# plt.show()
