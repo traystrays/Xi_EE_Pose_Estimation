@@ -11,13 +11,13 @@ from matplotlib.animation import FuncAnimation, PillowWriter
 # Change path for input and output files
 
 # manip 1 -> ECM in this case, both absolute paths 
-input_data = Path(r"C:\Users\Tracy\Documents\2026 RCL UBC\20260616_OR_Xi_EE\20260616_185054.606\KinManip2_20260616_185054.633_2026-06-16_18.csv") 
+input_data = Path(r"C:\Users\Tracy\Documents\2026 RCL UBC\20260616_OR_Xi_EE\20260616_185054.606\KinManip1_20260616_185054.618_2026-06-16_18_FK.csv") 
 video_data = Path(r"C:\Users\Tracy\Documents\2026 RCL UBC\20260616_OR_Xi_EE\video_stream_1_20260616_185106_timestamps.txt") 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-OUTPUT_PATH = REPO_ROOT/"data"/"xi_ee_0616_184707"
+OUTPUT_PATH = REPO_ROOT/"data"/"xi_ee_0616_185054"
 OUTPUT_PATH.mkdir(parents=True, exist_ok=True)
 
-matched_path = OUTPUT_PATH/"ECM_transforms.csv"
+matched_path = OUTPUT_PATH/"ECM2FK_transforms.csv"
 
 t_xyz_path = OUTPUT_PATH/"xyz_position_filtered.csv"
 t_a_xyz_path = OUTPUT_PATH/"xyz_position_translation_first.csv"
@@ -134,8 +134,13 @@ def remove_zero_positions(df, col_name="t_position", eps=1e-6, max_abs_value=10.
 # read csv to dataframe
 api_data = pd.read_csv(input_data, usecols=["system_timestamp_ms","field","data"]) 
 
-# Keep only transform rows.
-mask = api_data["field"] == "ISI_TIP_TRANSFORM"
+# Keep only rows needed for the matched output.
+output_fields = [
+    "ISI_TIP_TRANSFORM",
+    "ISI_SUJ_JOINT_VALUES",
+    "ISI_JOINT_VALUES",
+]
+mask = api_data["field"].isin(output_fields)
 api_data = api_data[mask].copy()
 
 api_data["robot_ts"] = (
@@ -164,15 +169,31 @@ video_frame["video_ts"] = video_frame["video_ts"].astype(timestamp_dtype)
 api_data = api_data.sort_values("robot_ts")
 video_frame = video_frame.sort_values("video_ts")
 
-# match robot time to each video frame time
+# match transform robot time to each video frame time
+transform_data = api_data[api_data["field"] == "ISI_TIP_TRANSFORM"].copy()
 matched = pd.merge_asof(
     video_frame,
-    api_data[["robot_ts", "data"]],
+    transform_data[["robot_ts", "data"]],
     left_on="video_ts",
     right_on="robot_ts",
     direction="nearest",
     tolerance=pd.Timedelta("20ms"), # tolerance per frame is 20 ms
 )
+
+for field_name in ["ISI_SUJ_JOINT_VALUES", "ISI_JOINT_VALUES"]:
+    field_data = api_data[api_data["field"] == field_name].copy()
+    field_data = field_data.rename(columns={"data": field_name})
+    matched = pd.merge_asof(
+        matched.sort_values("video_ts"),
+        field_data[["robot_ts", field_name]],
+        left_on="video_ts",
+        right_on="robot_ts",
+        direction="nearest",
+        tolerance=pd.Timedelta("20ms"),
+    ).rename(columns={"robot_ts_x": "robot_ts"})
+
+    if "robot_ts_y" in matched.columns:
+        matched = matched.drop(columns=["robot_ts_y"])
 
 unmatched_list = (
     matched.loc[matched["robot_ts"].isna(), "frame_id"]
@@ -226,6 +247,8 @@ matched = matched[
         "robot_ts",
         "time_error_ms",
         "Raw_Transform",
+        "ISI_SUJ_JOINT_VALUES",
+        "ISI_JOINT_VALUES",
         "Transform",
         "Rotation",
         "Translation",

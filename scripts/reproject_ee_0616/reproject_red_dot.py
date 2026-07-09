@@ -16,17 +16,16 @@ from clean_xi_api import plot_positions
 REPO_ROOT = Path(__file__).resolve().parents[2]
  
 HAND_EYE_NPZ = REPO_ROOT / "data" / "xi_data_0616" / "xi_hand_eye_0616_translation_first.npz"
-input_data = Path(r"C:\Users\Tracy\Documents\2026 RCL UBC\20260616_OR_Xi_EE\20260616_184919.594\KinManip3_20260616_184919.641_2026-06-16_18.csv")
-VIDEO_PATH = Path(r"C:\Users\Tracy\Documents\2026 RCL UBC\20260616_OR_Xi_EE\video_stream_1_20260616_184913.mp4")
-video_ts_data = Path(r"C:\Users\Tracy\Documents\2026 RCL UBC\20260616_OR_Xi_EE\video_stream_1_20260616_184913_timestamps.txt")
+input_data = Path(r"C:\Users\Tracy\Documents\2026 RCL UBC\20260616_OR_Xi_EE\20260616_185054.606\KinManip2_20260616_185054.633_2026-06-16_18_FK.csv")
+VIDEO_PATH = Path(r"C:\Users\Tracy\Documents\2026 RCL UBC\20260616_OR_Xi_EE\video_stream_1_20260616_185106.mp4")
+video_ts_data = Path(r"C:\Users\Tracy\Documents\2026 RCL UBC\20260616_OR_Xi_EE\video_stream_1_20260616_185106_timestamps.txt")
 
-OUTPUT_PATH = REPO_ROOT/"data"/"xi_ee_0616_184919"
+OUTPUT_PATH = REPO_ROOT/"data"/"xi_ee_0616_185054"
 OUTPUT_PATH.mkdir(parents=True, exist_ok=True)
 
-EE2_file = OUTPUT_PATH/"EE2_transforms.csv"
-EE1_file = OUTPUT_PATH/"EE1_transforms.csv"
-ECM_file = OUTPUT_PATH/"ECM_transforms.csv"
-OUTPUT_VIDEO = OUTPUT_PATH / "EE_red_dot_projection.mp4"
+EE2_file = OUTPUT_PATH/"EE2FK_transforms.csv"
+ECM_file = OUTPUT_PATH/"ECM2FK_transforms.csv"
+OUTPUT_VIDEO = OUTPUT_PATH / "EE_red_dot_projection_FK.mp4"
 
 
 ## CAMERA PARAMETERS
@@ -188,84 +187,67 @@ def project_camera_point_to_pixel(point_camera, K, active_roi):
     return x_norm, y_norm, u, v, bool(in_image)
 
 
-def find_EE_in_camera(EE2_transforms, EE1_transforms, ECM_transforms, ECM_T_camera):
+def find_EE_in_camera(EE2_transforms, ECM_transforms, ECM_T_camera):
     """
     Compute EE pose in the camera frame.
 
-    Uses matching EE2, EE1, and ECM transforms to compute the EE2 pose in the
-    camera frame.
+    EE2 and ECM transforms are expressed in the same base frame, so:
+    Camera_T_EE = Cam_T_ECM @ ECM_T_Base @ Base_T_EE2.
     """
     ee2_by_frame = {
         int(row["frame_id"]): row["T_translation_first"]
         for _, row in EE2_transforms.iterrows()
     }
-    ee1_by_frame = {
-        int(row["frame_id"]): row["T_translation_first"]
-        for _, row in EE1_transforms.iterrows()
-    }
+
     ecm_by_frame = {
         int(row["frame_id"]): row["T_translation_first"]
         for _, row in ECM_transforms.iterrows()
     }
 
-    # A camera-frame EE2 pose requires all three transforms for the same frame.
-    common_frame_ids = sorted(
-        set(ee2_by_frame) & set(ee1_by_frame) & set(ecm_by_frame)
-    )
+    frame_ids = sorted(set(ee2_by_frame) & set(ecm_by_frame))
     rows = []
 
-    for frame_id in common_frame_ids:
-        EE1_T_EE2 = ee2_by_frame[frame_id]
-        ECM_T_EE1 = ee1_by_frame[frame_id]
+    try:
+        Cam_T_ECM = np.linalg.inv(ECM_T_camera)
+    except np.linalg.LinAlgError as exc:
+        raise RuntimeError(f"cannot invert ECM_T_camera: {exc}") from exc
+
+    for frame_id in frame_ids:
+        Base_T_EE2 = ee2_by_frame[frame_id]
         Base_T_ECM = ecm_by_frame[frame_id]
 
         try:
-            Cam_T_ECM = np.linalg.inv(ECM_T_camera)
             ECM_T_Base = np.linalg.inv(Base_T_ECM)
-            # OLD_Camera_T_EE = Cam_T_ECM @ ECM_T_Base @ Base_T_EE
-
-            # Camera_T_EE = Cam_T_ECM @ Base_T_EE
-            # Camera_T_EE = Cam_T
-            Camera_T_EE = Cam_T_ECM @ EE1_T_EE2
         except np.linalg.LinAlgError as exc:
-            print(f"frame {frame_id}: cannot invert Base_T_camera: {exc}")
+            print(f"frame {frame_id}: cannot invert Base_T_ECM: {exc}")
             continue
+
+        Camera_T_EE = Cam_T_ECM @ ECM_T_Base @ Base_T_EE2
 
         rows.append(
             {
                 "frame_id": frame_id,
-                "EE1_T_EE2": EE1_T_EE2,
-                "ECM_T_EE1": ECM_T_EE1,
+                "Base_T_EE2": Base_T_EE2,
                 "Base_T_ECM": Base_T_ECM,
                 "Camera_T_EE": Camera_T_EE,
                 "EE_position_in_camera": Camera_T_EE[:3, 3],
-                # "OLD_Camera_T_EE": OLD_Camera_T_EE,
-                # "OLD_EE_position_in_camera": OLD_Camera_T_EE[:3, 3],
             }
         )
 
     ee2_frame_ids = set(ee2_by_frame)
-    ee1_frame_ids = set(ee1_by_frame)
     ecm_frame_ids = set(ecm_by_frame)
-    all_frame_ids = ee2_frame_ids | ee1_frame_ids | ecm_frame_ids
+    all_frame_ids = ee2_frame_ids | ecm_frame_ids
     missing_ee2_frame_ids = all_frame_ids - ee2_frame_ids
-    missing_ee1_frame_ids = all_frame_ids - ee1_frame_ids
     missing_ecm_frame_ids = all_frame_ids - ecm_frame_ids
 
     print(f"EE2 frames loaded: {len(ee2_frame_ids)}")
-    print(f"EE1 frames loaded: {len(ee1_frame_ids)}")
     print(f"ECM frames loaded: {len(ecm_frame_ids)}")
-    print(f"Common EE2/EE1/ECM frames: {len(common_frame_ids)}")
+    print(f"Common EE2/ECM frames: {len(frame_ids)}")
     print(f"Camera_T_EE transforms computed: {len(rows)}")
     if missing_ee2_frame_ids:
         print(
             f"Missing EE2 transforms ({len(missing_ee2_frame_ids)} frames): "
             f"{format_frame_ranges(missing_ee2_frame_ids)}"
-        )
-    if missing_ee1_frame_ids:
-        print(
-            f"Missing EE1 transforms ({len(missing_ee1_frame_ids)} frames): "
-            f"{format_frame_ranges(missing_ee1_frame_ids)}"
         )
     if missing_ecm_frame_ids:
         print(
@@ -318,11 +300,19 @@ def save_red_dot_video(video_path, projections_df, output_video):
         raise RuntimeError(f"Could not open output video writer: {output_video}")
 
     points_by_frame = {}
-    for _, row in projections_df.iterrows():
+    for row_idx, row in projections_df.iterrows():
         if not np.isfinite([row["pixel_u"], row["pixel_v"]]).all():
             continue
+        if "in_image" in projections_df.columns:
+            in_image = str(row["in_image"]).strip().lower()
+            if pd.isna(row["in_image"]) or in_image in {"false", "0", "no"}:
+                continue
 
-        frame_id = int(row["frame_id"])
+        frame_id = (
+            int(row["frame_id"])
+            if "frame_id" in projections_df.columns
+            else int(row_idx)
+        )
         points_by_frame[frame_id] = (
             int(round(float(row["pixel_u"]))),
             int(round(float(row["pixel_v"]))),
@@ -355,23 +345,28 @@ def save_red_dot_video(video_path, projections_df, output_video):
 image_width, image_height = get_video_size(VIDEO_PATH)
 active_roi = find_active_image_roi(VIDEO_PATH)
 EE2_transforms = load_xi_transform_file(EE2_file)
-EE1_transforms = load_xi_transform_file(EE1_file)
 ECM_transforms = load_xi_transform_file(ECM_file)
 EE_in_camera = find_EE_in_camera(
     EE2_transforms,
-    EE1_transforms,
     ECM_transforms,
     ECM_T_camera,
 )
 EE_in_camera = add_projected_pixels(EE_in_camera, "EE_position_in_camera", K, active_roi)
 
 EE_in_camera_to_save = EE_in_camera.copy()
+EE_in_camera_to_save["Base_T_EE2"] = EE_in_camera_to_save["Base_T_EE2"].apply(
+    format_array
+)
+EE_in_camera_to_save["Base_T_ECM"] = EE_in_camera_to_save["Base_T_ECM"].apply(
+    format_array
+)
 EE_in_camera_to_save["Camera_T_EE"] = EE_in_camera_to_save["Camera_T_EE"].apply(
     format_array
 )
 EE_in_camera_to_save["EE_position_in_camera"] = EE_in_camera_to_save[
     "EE_position_in_camera"
 ].apply(format_array)
+
 EE_in_camera_to_save.to_csv(OUTPUT_PATH / "EE_in_camera.csv", index=False)
 
 save_red_dot_video(VIDEO_PATH, EE_in_camera, OUTPUT_VIDEO)
