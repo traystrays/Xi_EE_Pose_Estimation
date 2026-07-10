@@ -23,8 +23,8 @@ video_ts_data = Path(r"C:\Users\Tracy\Documents\2026 RCL UBC\20260616_OR_Xi_EE\v
 OUTPUT_PATH = REPO_ROOT/"data"/"xi_ee_0616_185054"
 OUTPUT_PATH.mkdir(parents=True, exist_ok=True)
 
-EE2_file = OUTPUT_PATH/"EE2FK_transforms.csv"
-ECM_file = OUTPUT_PATH/"ECM2FK_transforms.csv"
+EE2_file = OUTPUT_PATH/"EEFK_corrected_pitch_transforms.csv"
+ECM_file = OUTPUT_PATH/"ECMFK_transforms.csv"
 OUTPUT_VIDEO = OUTPUT_PATH / "EE_red_dot_projection_FK.mp4"
 
 
@@ -215,12 +215,6 @@ def find_EE_in_camera(EE2_transforms, ECM_transforms, ECM_T_camera):
     for frame_id in frame_ids:
         Base_T_EE2 = ee2_by_frame[frame_id]
         Base_T_ECM = ecm_by_frame[frame_id]
-        ECM_transforms = np.array([
-            [0.003493879,  0.99860847,    0.0526101813, -0.0213901084],
-            [0.987837672, -0.0116248354,  0.155053049,  -0.164069116],
-            [0.155449271,  0.0514284559, -0.986505091,  -0.974344492],
-            [0.0,          0.0,           0.0,            1.0],
-        ], dtype=np.float64)
 
         try:
             ECM_T_Base = np.linalg.inv(Base_T_ECM)
@@ -375,7 +369,7 @@ EE_in_camera_to_save["EE_position_in_camera"] = EE_in_camera_to_save[
 
 EE_in_camera_to_save.to_csv(OUTPUT_PATH / "EE_in_camera.csv", index=False)
 
-save_red_dot_video(VIDEO_PATH, EE_in_camera, OUTPUT_VIDEO)
+# save_red_dot_video(VIDEO_PATH, EE_in_camera, OUTPUT_VIDEO)
 
 print(EE_in_camera.head())
 

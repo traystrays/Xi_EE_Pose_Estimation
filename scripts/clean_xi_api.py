@@ -11,13 +11,13 @@ from matplotlib.animation import FuncAnimation, PillowWriter
 # Change path for input and output files
 
 # manip 1 -> ECM in this case, both absolute paths 
-input_data = Path(r"C:\Users\Tracy\Documents\2026 RCL UBC\20260616_OR_Xi_EE\20260616_185054.606\KinManip1_20260616_185054.618_2026-06-16_18_FK.csv") 
+input_data = Path(r"C:\Users\Tracy\Documents\2026 RCL UBC\20260616_OR_Xi_EE\20260616_185054.606\KinManip1_20260616_185054.618_2026-06-16_18_FK_corrected_pitch.csv") 
 video_data = Path(r"C:\Users\Tracy\Documents\2026 RCL UBC\20260616_OR_Xi_EE\video_stream_1_20260616_185106_timestamps.txt") 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 OUTPUT_PATH = REPO_ROOT/"data"/"xi_ee_0616_185054"
 OUTPUT_PATH.mkdir(parents=True, exist_ok=True)
 
-matched_path = OUTPUT_PATH/"ECM2FK_transforms.csv"
+matched_path = OUTPUT_PATH/"ECMFK_transforms.csv"
 
 t_xyz_path = OUTPUT_PATH/"xyz_position_filtered.csv"
 t_a_xyz_path = OUTPUT_PATH/"xyz_position_translation_first.csv"
