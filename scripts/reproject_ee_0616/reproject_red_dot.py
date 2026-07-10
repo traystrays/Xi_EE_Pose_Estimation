@@ -215,6 +215,12 @@ def find_EE_in_camera(EE2_transforms, ECM_transforms, ECM_T_camera):
     for frame_id in frame_ids:
         Base_T_EE2 = ee2_by_frame[frame_id]
         Base_T_ECM = ecm_by_frame[frame_id]
+        ECM_transforms = np.array([
+            [0.003493879,  0.99860847,    0.0526101813, -0.0213901084],
+            [0.987837672, -0.0116248354,  0.155053049,  -0.164069116],
+            [0.155449271,  0.0514284559, -0.986505091,  -0.974344492],
+            [0.0,          0.0,           0.0,            1.0],
+        ], dtype=np.float64)
 
         try:
             ECM_T_Base = np.linalg.inv(Base_T_ECM)
@@ -303,20 +309,18 @@ def save_red_dot_video(video_path, projections_df, output_video):
     for row_idx, row in projections_df.iterrows():
         if not np.isfinite([row["pixel_u"], row["pixel_v"]]).all():
             continue
-        if "in_image" in projections_df.columns:
-            in_image = str(row["in_image"]).strip().lower()
-            if pd.isna(row["in_image"]) or in_image in {"false", "0", "no"}:
-                continue
 
         frame_id = (
             int(row["frame_id"])
             if "frame_id" in projections_df.columns
             else int(row_idx)
         )
-        points_by_frame[frame_id] = (
+        point = (
             int(round(float(row["pixel_u"]))),
             int(round(float(row["pixel_v"]))),
         )
+        if 0 <= point[0] < width and 0 <= point[1] < height:
+            points_by_frame[frame_id] = point
 
     frame_id = 0
     drawn = 0
@@ -346,6 +350,8 @@ image_width, image_height = get_video_size(VIDEO_PATH)
 active_roi = find_active_image_roi(VIDEO_PATH)
 EE2_transforms = load_xi_transform_file(EE2_file)
 ECM_transforms = load_xi_transform_file(ECM_file)
+
+
 EE_in_camera = find_EE_in_camera(
     EE2_transforms,
     ECM_transforms,
