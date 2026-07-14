@@ -11,8 +11,6 @@ import numpy as np
 import pandas as pd
 
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
-DATA_DIR = REPO_ROOT / "data" / "xi_ee_0623_162612"
 NUMBER_PATTERN = re.compile(
     r"[-+]?(?:\d+\.?\d*|\.\d+|\d+)(?:[eE][-+]?\d+)?"
 )
@@ -36,41 +34,80 @@ def set_equal_limits(ax, positions: np.ndarray) -> None:
     ax.set_box_aspect((1, 1, 1))
 
 
+def best_fit_rigid_transform(
+    source: np.ndarray, target: np.ndarray
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Return R, t, transformed source minimizing ||target - (R source + t)||."""
+    source_center = source.mean(axis=0)
+    target_center = target.mean(axis=0)
+    source_centered = source - source_center
+    target_centered = target - target_center
+
+    covariance = source_centered.T @ target_centered
+    u, _, vt = np.linalg.svd(covariance)
+    rotation = vt.T @ u.T
+    if np.linalg.det(rotation) < 0:
+        vt[-1, :] *= -1
+        rotation = vt.T @ u.T
+
+    translation = target_center - rotation @ source_center
+    transformed = (rotation @ source.T).T + translation
+    return rotation, translation, transformed
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--direct",
         type=Path,
-        default=DATA_DIR / "EE_in_camera_hand_eye.csv",
+        required=True,
+        help="CSV containing the direct hand-eye trajectory",
     )
     parser.add_argument(
         "--fk",
         type=Path,
-        default=DATA_DIR / "EE_in_camera_FK_hand_eye.csv",
+        required=True,
+        help="CSV containing the FK hand-eye trajectory",
     )
-    parser.add_argument(
-        "--save",
-        type=Path,
-        default=DATA_DIR / "EE_hand_eye_direct_vs_FK_trajectory.png",
-    )
-    parser.add_argument("--no-show", action="store_true")
     return parser.parse_args()
+
+
+def load_trajectory(path: Path, translation_name: str) -> pd.DataFrame:
+    """Load a trajectory using either frame_id or clip_frame_id as its key."""
+    data = pd.read_csv(path)
+    frame_column = next(
+        (name for name in ("frame_id", "clip_frame_id") if name in data.columns),
+        None,
+    )
+    if frame_column is None:
+        raise ValueError(
+            f"{path} must contain either a 'frame_id' or 'clip_frame_id' column"
+        )
+    if "Translation" not in data.columns:
+        raise ValueError(f"{path} must contain a 'Translation' column")
+    return data[[frame_column, "Translation"]].rename(
+        columns={frame_column: "frame_id", "Translation": translation_name}
+    )
 
 
 def main() -> None:
     args = parse_args()
-    direct = pd.read_csv(args.direct)[["clip_frame_id", "Translation"]].rename(
-        columns={"Translation": "direct_translation"}
-    )
-    fk = pd.read_csv(args.fk)[["clip_frame_id", "Translation"]].rename(
-        columns={"Translation": "fk_translation"}
-    )
-    matched = direct.merge(fk, on="clip_frame_id", how="inner", validate="one_to_one")
+    direct = load_trajectory(args.direct, "direct_translation")
+    fk = load_trajectory(args.fk, "fk_translation")
+    matched = direct.merge(fk, on="frame_id", how="inner", validate="one_to_one")
     if matched.empty:
-        raise SystemExit("No matching clip_frame_id values")
+        raise SystemExit("No matching frame_id values")
 
     direct_points = np.stack(matched["direct_translation"].map(parse_translation))
     fk_points = np.stack(matched["fk_translation"].map(parse_translation))
+    tre_m = np.linalg.norm(direct_points - fk_points, axis=1)
+    tre_mm = tre_m * 1000.0
+    rotation, translation, aligned_fk_points = best_fit_rigid_transform(
+        fk_points, direct_points
+    )
+    aligned_tre_mm = (
+        np.linalg.norm(direct_points - aligned_fk_points, axis=1) * 1000.0
+    )
 
     fig = plt.figure(figsize=(10, 8))
     ax = fig.add_subplot(111, projection="3d")
@@ -81,7 +118,7 @@ def main() -> None:
         color="tab:red",
         s=12,
         alpha=0.75,
-        label="Direct + hand-eye",
+        label="Direct",
     )
     ax.scatter(
         fk_points[:, 0],
@@ -90,26 +127,73 @@ def main() -> None:
         color="tab:cyan",
         s=12,
         alpha=0.75,
-        label="FK + hand-eye",
+        label="FK",
     )
     set_equal_limits(ax, np.vstack((direct_points, fk_points)))
     ax.set_xlabel("Camera X (m)")
     ax.set_ylabel("Camera Y (m)")
     ax.set_zlabel("Camera Z (m)")
-    ax.set_title(f"Direct and FK hand-eye trajectories ({len(matched)} matched frames)")
+    ax.set_title(
+        f"Direct and FK hand-eye trajectories ({len(matched)} matched frames)\n"
+        f"Mean TRE: {tre_mm.mean():.2f} mm"
+    )
     ax.legend()
     fig.tight_layout()
 
-    args.save.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(args.save, dpi=200, bbox_inches="tight")
+    aligned_fig = plt.figure(figsize=(10, 8))
+    aligned_ax = aligned_fig.add_subplot(111, projection="3d")
+    aligned_ax.scatter(
+        direct_points[:, 0],
+        direct_points[:, 1],
+        direct_points[:, 2],
+        color="tab:red",
+        s=12,
+        alpha=0.75,
+        label="Direct (ground truth)",
+    )
+    aligned_ax.scatter(
+        aligned_fk_points[:, 0],
+        aligned_fk_points[:, 1],
+        aligned_fk_points[:, 2],
+        color="tab:green",
+        s=12,
+        alpha=0.75,
+        label="FK + best-fit transform",
+    )
+    set_equal_limits(
+        aligned_ax, np.vstack((direct_points, aligned_fk_points))
+    )
+    aligned_ax.set_xlabel("Camera X (m)")
+    aligned_ax.set_ylabel("Camera Y (m)")
+    aligned_ax.set_zlabel("Camera Z (m)")
+    aligned_ax.set_title(
+        f"Direct and aligned FK trajectories ({len(matched)} matched frames)\n"
+        f"Mean post-alignment TRE: {aligned_tre_mm.mean():.2f} mm"
+    )
+    aligned_ax.legend()
+    aligned_fig.tight_layout()
+
     print(f"Matched frames: {len(matched)}")
     print(f"Direct mean position: {direct_points.mean(axis=0)}")
     print(f"FK mean position: {fk_points.mean(axis=0)}")
-    print(f"Saved: {args.save.resolve()}")
-    if not args.no_show:
-        plt.show()
-    else:
-        plt.close(fig)
+    print("Before alignment TRE (Target Registration Error):")
+    print(f"  Mean:   {tre_mm.mean():.3f} mm")
+    print(f"  Median: {np.median(tre_mm):.3f} mm")
+    print(f"  RMS:    {np.sqrt(np.mean(tre_mm**2)):.3f} mm")
+    print(f"  Min:    {tre_mm.min():.3f} mm")
+    print(f"  Max:    {tre_mm.max():.3f} mm")
+    transform = np.eye(4)
+    transform[:3, :3] = rotation
+    transform[:3, 3] = translation
+    print("Best-fit rigid transform (FK to direct):")
+    print(transform)
+    print("After alignment TRE:")
+    print(f"  Mean:   {aligned_tre_mm.mean():.3f} mm")
+    print(f"  Median: {np.median(aligned_tre_mm):.3f} mm")
+    print(f"  RMS:    {np.sqrt(np.mean(aligned_tre_mm**2)):.3f} mm")
+    print(f"  Min:    {aligned_tre_mm.min():.3f} mm")
+    print(f"  Max:    {aligned_tre_mm.max():.3f} mm")
+    plt.show()
 
 
 if __name__ == "__main__":
