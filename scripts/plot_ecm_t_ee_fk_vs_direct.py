@@ -26,7 +26,7 @@ import pandas as pd
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_DATA_DIR = REPO_ROOT / "data" / "xi_ee_0616_185054"
+DEFAULT_DATA_DIR = REPO_ROOT / "data" / "xi_ee_0616_185054_new_measurements"
 NUMBER_PATTERN = re.compile(
     r"[-+]?(?:\d+\.?\d*|\.\d+|\d+)(?:[eE][-+]?\d+)?"
 )
@@ -60,6 +60,10 @@ def load_fk_translations(csv_path: Path) -> pd.DataFrame:
 
     if "ECM_T_EE_Translation" in df:
         translations = df["ECM_T_EE_Translation"].map(parse_translation)
+    elif "Transform" in df:
+        translations = df["Transform"].map(transform_translation)
+    elif "ECM_T_EE" in df:
+        translations = df["ECM_T_EE"].map(transform_translation)
     elif "ECM_T_EE" in df:
         translations = df["ECM_T_EE"].map(transform_translation)
     else:
@@ -114,33 +118,36 @@ def rigidly_align(source: np.ndarray, target: np.ndarray):
     return rotation, translation, aligned
 
 
-def build_plot(matched: pd.DataFrame, apply_best_fit: bool = False):
-    fk = np.stack(matched["fk_translation"].to_numpy())
-    direct = np.stack(matched["direct_translation"].to_numpy())
+def tre_mm(measured: np.ndarray, ground_truth: np.ndarray) -> np.ndarray:
+    """Return pointwise target registration errors in millimetres."""
+    return np.linalg.norm(measured - ground_truth, axis=1) * 1000.0
 
-    title_prefix = "ECM-to-EE translation comparison"
-    if apply_best_fit:
-        rotation, translation, fk = rigidly_align(fk, direct)
-        residual = np.linalg.norm(fk - direct, axis=1)
-        print("Best-fit FK-to-direct rotation:")
-        print(rotation)
-        print(f"Best-fit FK-to-direct translation: {translation}")
-        print(
-            "Aligned position residuals: "
-            f"median={np.median(residual) * 1000:.3f} mm, "
-            f"RMS={np.sqrt(np.mean(residual**2)) * 1000:.3f} mm, "
-            f"max={np.max(residual) * 1000:.3f} mm"
-        )
-        title_prefix += " after rigid best-fit alignment"
 
+def print_tre_summary(label: str, errors_mm: np.ndarray) -> None:
+    """Print common summary statistics for pointwise TRE values."""
+    print(label)
+    print(f"  Mean:   {errors_mm.mean():.3f} mm")
+    print(f"  Median: {np.median(errors_mm):.3f} mm")
+    print(f"  RMS:    {np.sqrt(np.mean(errors_mm**2)):.3f} mm")
+    print(f"  Min:    {errors_mm.min():.3f} mm")
+    print(f"  Max:    {errors_mm.max():.3f} mm")
+
+
+def plot_trajectories(
+    measured: np.ndarray,
+    direct: np.ndarray,
+    measured_label: str,
+    title: str,
+):
+    """Plot a measured trajectory against the direct ground-truth trajectory."""
     fig = plt.figure(figsize=(10, 8))
     ax = fig.add_subplot(111, projection="3d")
 
     ax.scatter(
-        fk[:, 0],
-        fk[:, 1],
-        fk[:, 2],
-        label="FK: inv(Base_T_ECM) @ Base_T_EE",
+        measured[:, 0],
+        measured[:, 1],
+        measured[:, 2],
+        label=measured_label,
         color="tab:blue",
         s=10,
         alpha=0.8,
@@ -149,25 +156,58 @@ def build_plot(matched: pd.DataFrame, apply_best_fit: bool = False):
         direct[:, 0],
         direct[:, 1],
         direct[:, 2],
-        label="Direct: EE_transforms_correct",
+        label="Direct (ground truth)",
         color="tab:orange",
         s=10,
         alpha=0.8,
     )
 
-    ax.scatter(*fk[0], color="tab:blue", marker="o", s=60)
+    ax.scatter(*measured[0], color="tab:blue", marker="o", s=60)
     ax.scatter(*direct[0], color="tab:orange", marker="o", s=60)
-    ax.scatter(*fk[-1], color="tab:blue", marker="X", s=70)
+    ax.scatter(*measured[-1], color="tab:blue", marker="X", s=70)
     ax.scatter(*direct[-1], color="tab:orange", marker="X", s=70)
 
-    set_equal_3d_limits(ax, np.vstack((fk, direct)))
+    set_equal_3d_limits(ax, np.vstack((measured, direct)))
     ax.set_xlabel("X (m)")
     ax.set_ylabel("Y (m)")
     ax.set_zlabel("Z (m)")
-    ax.set_title(f"{title_prefix} ({len(matched)} matched frames)")
+    ax.set_title(title)
     ax.legend()
     fig.tight_layout()
     return fig
+
+
+def build_plots(matched: pd.DataFrame):
+    fk = np.stack(matched["fk_translation"].to_numpy())
+    direct = np.stack(matched["direct_translation"].to_numpy())
+    errors_before = tre_mm(fk, direct)
+    rotation, translation, aligned_fk = rigidly_align(fk, direct)
+    errors_after = tre_mm(aligned_fk, direct)
+
+    print_tre_summary("Before alignment TRE (FK vs direct):", errors_before)
+    transform = np.eye(4)
+    transform[:3, :3] = rotation
+    transform[:3, 3] = translation
+    print("Best-fit rigid transform (FK to direct):")
+    np.set_printoptions(suppress=True, precision=8)
+    print(transform)
+    print_tre_summary("After best-fit alignment TRE:", errors_after)
+
+    original_fig = plot_trajectories(
+        fk,
+        direct,
+        "FK: inv(Base_T_ECM) @ Base_T_EE",
+        f"ECM-to-EE translation comparison ({len(matched)} matched frames)\n"
+        f"Mean TRE: {errors_before.mean():.3f} mm",
+    )
+    aligned_fig = plot_trajectories(
+        aligned_fk,
+        direct,
+        "FK + best-fit rigid transform",
+        f"Best-fit aligned ECM-to-EE comparison ({len(matched)} matched frames)\n"
+        f"Mean TRE: {errors_after.mean():.3f} mm",
+    )
+    return original_fig, aligned_fig
 
 
 def parse_args() -> argparse.Namespace:
@@ -175,21 +215,16 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--fk",
         type=Path,
-        default=DEFAULT_DATA_DIR / "ECM_T_EE_from_FK.csv",
+        default=DEFAULT_DATA_DIR / "EE_in_ECM_FK.csv",
         help="FK-derived ECM_T_EE CSV",
     )
     parser.add_argument(
         "--direct",
         type=Path,
-        default=DEFAULT_DATA_DIR / "EE_transforms_correct.csv",
+        default=DEFAULT_DATA_DIR / "EE_transforms_direct.csv",
         help="Direct end-effector transform CSV",
     )
     parser.add_argument("--save", type=Path, help="Optional output image path")
-    parser.add_argument(
-        "--apply-best-fit",
-        action="store_true",
-        help="Rigidly align the FK translations to the matched direct translations",
-    )
     parser.add_argument(
         "--no-show", action="store_true", help="Do not open the interactive plot window"
     )
@@ -213,15 +248,21 @@ def main() -> None:
     print(f"Matched frames: {len(matched)}")
     print(f"Frame range: {matched.frame_id.iloc[0]} to {matched.frame_id.iloc[-1]}")
 
-    fig = build_plot(matched, apply_best_fit=args.apply_best_fit)
+    original_fig, aligned_fig = build_plots(matched)
     if args.save:
         args.save.parent.mkdir(parents=True, exist_ok=True)
-        fig.savefig(args.save, dpi=200, bbox_inches="tight")
-        print(f"Saved plot: {args.save.resolve()}")
+        original_fig.savefig(args.save, dpi=200, bbox_inches="tight")
+        aligned_path = args.save.with_name(
+            f"{args.save.stem}_best_fit{args.save.suffix}"
+        )
+        aligned_fig.savefig(aligned_path, dpi=200, bbox_inches="tight")
+        print(f"Saved original plot: {args.save.resolve()}")
+        print(f"Saved aligned plot: {aligned_path.resolve()}")
     if not args.no_show:
         plt.show()
     else:
-        plt.close(fig)
+        plt.close(original_fig)
+        plt.close(aligned_fig)
 
 
 if __name__ == "__main__":

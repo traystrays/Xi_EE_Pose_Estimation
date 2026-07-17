@@ -14,10 +14,10 @@ from matplotlib.animation import FuncAnimation, PillowWriter
 input_data = Path(r"C:\Users\Tracy\Documents\2026 RCL UBC\20260616_OR_Xi_EE\20260616_185054.606\KinManip2_20260616_185054.633_2026-06-16_18.csv") 
 video_data = Path(r"C:\Users\Tracy\Documents\2026 RCL UBC\20260616_OR_Xi_EE\video_stream_1_20260616_185106_timestamps.txt") 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-OUTPUT_PATH = REPO_ROOT/"data"/"xi_ee_0616_185054"
+OUTPUT_PATH = REPO_ROOT / "data" / "xi_ee_0616_185054_new_measurements"
 OUTPUT_PATH.mkdir(parents=True, exist_ok=True)
 
-matched_path = OUTPUT_PATH/"EE_transform.csv"
+matched_path = OUTPUT_PATH/"EE_transforms_direct.csv"
 
 t_xyz_path = OUTPUT_PATH/"xyz_position_filtered.csv"
 t_a_xyz_path = OUTPUT_PATH/"xyz_position_translation_first.csv"
