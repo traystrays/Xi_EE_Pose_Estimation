@@ -10,15 +10,15 @@ from threeD_trajectory import parse_3d_column
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-OUTPUT_PATH = REPO_ROOT / "data" / "xi_ee_0616_185054"
+OUTPUT_PATH = REPO_ROOT / "data" / "xi_ee_0616_185054_new_measurements"
 
-EE_CSV = OUTPUT_PATH / "EE_transforms_correct.csv"
-ECM_CSV = OUTPUT_PATH / "ECM_transforms.csv"
+EE_CSV = OUTPUT_PATH / "EE_transforms_FK.csv"
+ECM_CSV = OUTPUT_PATH / "ECM_transforms_FK.csv"
 BASE_TO_EE_CSV = OUTPUT_PATH / "Base_T_EE_from_ECM_EE.csv"
 BASE_TO_EEFK_CSV = OUTPUT_PATH / "Base_T_EEFK_from_inv_ECMFK_EEFK.csv"
 
 EEFK_CSV = OUTPUT_PATH / "EEFK_corrected_pitch_transforms.csv"
-ECMFK_CSV = OUTPUT_PATH / "ECMFK_transforms.csv"
+ECMFK_CSV = OUTPUT_PATH / "ECMFK_transforms_FK.csv"
 
 def parse_transform_matrix(transform_str):
     values = re.findall(

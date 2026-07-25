@@ -6,7 +6,9 @@ import sys
 import cv2
 from scipy.io import loadmat
 
-
+"""
+Note: When using the FK calculation, everything originates from Base of robot
+"""
 SCRIPTS_DIR = Path(__file__).resolve().parents[1]
 sys.path.append(str(SCRIPTS_DIR))
 
@@ -20,12 +22,12 @@ input_data = Path(r"C:\Users\Tracy\Documents\2026 RCL UBC\20260616_OR_Xi_EE\2026
 VIDEO_PATH = Path(r"C:\Users\Tracy\Documents\2026 RCL UBC\20260616_OR_Xi_EE\video_stream_1_20260616_185106.mp4")
 video_ts_data = Path(r"C:\Users\Tracy\Documents\2026 RCL UBC\20260616_OR_Xi_EE\video_stream_1_20260616_185106_timestamps.txt")
 
-OUTPUT_PATH = REPO_ROOT/"data"/"xi_ee_0616_185054"
+OUTPUT_PATH = REPO_ROOT/"data"/"xi_ee_0616_185054_new_measurements"
 OUTPUT_PATH.mkdir(parents=True, exist_ok=True)
 
-EE2_file = OUTPUT_PATH/"EEFK_corrected_pitch_transforms.csv"
-ECM_file = OUTPUT_PATH/"ECMFK_transforms.csv"
-OUTPUT_VIDEO = OUTPUT_PATH / "EE_red_dot_projection_FK.mp4"
+BASE_T_EE2_FILE = OUTPUT_PATH/"EE_transforms_FK.csv"
+BASE_T_ECM_FILE = OUTPUT_PATH/"ECM_transforms_FK.csv"
+OUTPUT_VIDEO = OUTPUT_PATH / "EE_red_dot_projection_FK_new.mp4"
 
 
 ## CAMERA PARAMETERS
@@ -41,6 +43,7 @@ ECM_T_camera = solved["X"]
 
 print(ECM_T_camera)
 
+exit()
 
 
 def load_xi_transform_file(csv_path):
@@ -206,7 +209,8 @@ def find_EE_in_camera(EE2_transforms, ECM_transforms, ECM_T_camera):
 
     frame_ids = sorted(set(ee2_by_frame) & set(ecm_by_frame))
     rows = []
-
+    print(ECM_T_camera)
+    
     try:
         Cam_T_ECM = np.linalg.inv(ECM_T_camera)
     except np.linalg.LinAlgError as exc:
@@ -342,8 +346,8 @@ def save_red_dot_video(video_path, projections_df, output_video):
 
 image_width, image_height = get_video_size(VIDEO_PATH)
 active_roi = find_active_image_roi(VIDEO_PATH)
-EE2_transforms = load_xi_transform_file(EE2_file)
-ECM_transforms = load_xi_transform_file(ECM_file)
+EE2_transforms = load_xi_transform_file(BASE_T_EE2_FILE)
+ECM_transforms = load_xi_transform_file(BASE_T_ECM_FILE)
 
 
 EE_in_camera = find_EE_in_camera(
