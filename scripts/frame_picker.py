@@ -28,7 +28,15 @@ FRAME_TRANSFORMS_CSV = DATA_DIR / "frame_transforms.csv"
 
 
 def load_valid_frame_ids(csv_path=FRAME_TRANSFORMS_CSV):
-    frame_transforms = pd.read_csv(csv_path, usecols=["frame_id"])
+    frame_transforms = pd.read_csv(csv_path)
+    if "frame_id" not in frame_transforms:
+        raise ValueError(f"No frame_id column found in {csv_path}")
+    if "Transform" in frame_transforms:
+        frame_transforms = frame_transforms[
+            ~frame_transforms["Transform"]
+            .astype(str)
+            .str.contains(r"\bnan\b", case=False, regex=True)
+        ]
     frame_ids = (
         pd.to_numeric(frame_transforms["frame_id"], errors="coerce")
         .dropna()
@@ -46,7 +54,16 @@ def load_valid_frame_ids(csv_path=FRAME_TRANSFORMS_CSV):
     return frame_ids
 
 
-def main(video_path, valid_only=False):
+def main(
+    video_path,
+    valid_only=False,
+    data_dir=DATA_DIR,
+    image_dir=IMAGE_DIR,
+    valid_frames_csv=FRAME_TRANSFORMS_CSV,
+):
+    data_dir = Path(data_dir)
+    image_dir = Path(image_dir)
+    csv_path = data_dir / "saved_frames.csv"
     if not os.path.exists(video_path):
         print(f"Error: file not found: {video_path}")
         sys.exit(1)
@@ -61,7 +78,7 @@ def main(video_path, valid_only=False):
 
     valid_frame_ids = None
     if valid_only:
-        valid_frame_ids = load_valid_frame_ids()
+        valid_frame_ids = load_valid_frame_ids(valid_frames_csv)
         valid_frame_ids = [
             frame_id for frame_id in valid_frame_ids
             if 0 <= frame_id < total_frames
@@ -72,16 +89,16 @@ def main(video_path, valid_only=False):
         print(f"Showing only valid transform frames: {len(valid_frame_ids)}")
 
     # Output setup
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-    IMAGE_DIR.mkdir(parents=True, exist_ok=True)
+    data_dir.mkdir(parents=True, exist_ok=True)
+    image_dir.mkdir(parents=True, exist_ok=True)
 
     # Reset CSV with header at the start of each picker run.
-    with open(CSV_PATH, "w", newline="") as f:
+    with open(csv_path, "w", newline="") as f:
         writer = csv.writer(f)
         writer.writerow(["frame_number", "image_filename"])
 
     saved_frame_numbers = set()
-    with open(CSV_PATH, "r", newline="") as f:
+    with open(csv_path, "r", newline="") as f:
         reader = csv.DictReader(f)
         for row in reader:
             try:
@@ -90,8 +107,8 @@ def main(video_path, valid_only=False):
                 continue
 
     print(f"Existing saved frames: {len(saved_frame_numbers)}")
-    print(f"Saving images to: {IMAGE_DIR}")
-    print(f"Logging frames to: {CSV_PATH}")
+    print(f"Saving images to: {image_dir}")
+    print(f"Logging frames to: {csv_path}")
 
     window_name = "Frame Picker - drag slider, press S to save, Q to quit"
     cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
@@ -163,10 +180,10 @@ def main(video_path, valid_only=False):
                 continue
 
             img_filename = f"frame_{current_frame:06d}.png"
-            img_path = IMAGE_DIR / img_filename
+            img_path = image_dir / img_filename
             cv2.imwrite(str(img_path), frame)
 
-            with open(CSV_PATH, "a", newline="") as f:
+            with open(csv_path, "a", newline="") as f:
                 writer = csv.writer(f)
                 writer.writerow([current_frame, img_filename])
 
@@ -184,8 +201,21 @@ if __name__ == "__main__":
     parser.add_argument(
         "--valid-only",
         action="store_true",
-        help="Show only frame IDs present in data/xi_data_0616/frame_transforms.csv.",
+        help="Show only frame IDs present in --valid-frames-csv.",
+    )
+    parser.add_argument("--data-dir", type=Path, default=DATA_DIR)
+    parser.add_argument("--image-dir", type=Path, default=IMAGE_DIR)
+    parser.add_argument(
+        "--valid-frames-csv",
+        type=Path,
+        default=FRAME_TRANSFORMS_CSV,
     )
     args = parser.parse_args()
 
-    main(args.video_path, valid_only=args.valid_only)
+    main(
+        args.video_path,
+        valid_only=args.valid_only,
+        data_dir=args.data_dir,
+        image_dir=args.image_dir,
+        valid_frames_csv=args.valid_frames_csv,
+    )

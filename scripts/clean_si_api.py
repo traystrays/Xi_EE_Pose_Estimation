@@ -17,7 +17,7 @@ left_output_dir = Path(r"C:\Users\Tracy\Projects\Xi_EE_Pose\checkerboard_images\
 right_video = Path(r"C:\Users\Tracy\Documents\2026 RCL UBC\si_data_06052026\video_stream_2_20260605_132941.mp4")
 right_output_dir = Path(r"C:\Users\Tracy\Projects\Xi_EE_Pose\checkerboard_images\si_20260612\right")  
 
-left_K_path = Path(r"C:\Users\Tracy\Documents\MATLAB\20260605_si_data\K_cam1_Si.mat")
+left_K_path = Path(r"C:\Users\Tracy\Documents\MATLAB\20260727_si_data\K.mat")
 
 Output_Data.mkdir(parents=True, exist_ok=True)
 left_output_dir.mkdir(parents=True, exist_ok=True)
