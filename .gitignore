@@ -2,10 +2,9 @@
 video_stream_with_dot.mp4
 
 checkerboard_images
-# Optional: ignore all local MP4 exports if you want
+# ignore all local MP4 exports
 *.mp4
 
-  
 # Python environments and caches
 .venv/
 __pycache__/
