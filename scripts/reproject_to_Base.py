@@ -40,12 +40,10 @@ print(X_inv)
 K = loadmat(left_K_path)["K"].astype(np.float64)
 print(K)
 
-
-dist_coeffs = np.array(
-    [-0.297863212023482, 0.403564940306343, 0, 0, 0],
-    dtype=np.float64
+DIST_COEFFS = np.array(
+    [-0.002994058031627, 0.013201245121718, 0.0, 0.0, 0.0],
+    dtype=np.float64,
 )
-
 
  
 # Set checkerboard geometry
