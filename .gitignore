@@ -2,7 +2,11 @@
 video_stream_with_dot.mp4
 
 checkerboard_images
+# ignore all local MP4 exports
 *.mp4
 
+# Python environments and caches
+.venv/
 __pycache__/
-*.py[cod]  
+*.py[cod]
+.pytest_cache/
