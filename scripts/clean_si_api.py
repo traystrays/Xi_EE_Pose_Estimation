@@ -8,20 +8,14 @@ import re
 import math 
 
 # Paths
-Si_Data = Path(r"C:\Users\Tracy\Documents\2026 RCL UBC\si_data_06122026\data_local_part_1_12_6_2026_17_8_40.csv")
-Left_cam_timestamp = Path(r"C:\Users\Tracy\Documents\2026 RCL UBC\si_data_06122026\video_stream_1_20260612_170858_timestamps.txt")
-Output_Data = Path(r"C:\Users\Tracy\Projects\Xi_EE_Pose\data\si_data_0612")
+Si_Data = Path(r"D:\20261005_calib\data_local_part_1_5_10_2026_15_10_10.csv")
+Left_cam_timestamp = Path(r"D:\20261005_calib\video_stream_1_20261005_151006_timestamps.txt")
+Output_Data = Path(r"D:\20261005_calib")
 
-left_video = Path(r"C:\Users\Tracy\Documents\2026 RCL UBC\si_data_06052026\video_stream_1_20260605_132941.mp4")
-left_output_dir = Path(r"C:\Users\Tracy\Projects\Xi_EE_Pose\checkerboard_images\si_20260612\left")
-right_video = Path(r"C:\Users\Tracy\Documents\2026 RCL UBC\si_data_06052026\video_stream_2_20260605_132941.mp4")
-right_output_dir = Path(r"C:\Users\Tracy\Projects\Xi_EE_Pose\checkerboard_images\si_20260612\right")  
-
-left_K_path = Path(r"C:\Users\Tracy\Documents\MATLAB\20260727_si_data\K.mat")
+left_K_path = Path(r"C:\Users\Tracy\Documents\MATLAB\20261005_si_data\K_left.mat")
 
 Output_Data.mkdir(parents=True, exist_ok=True)
-left_output_dir.mkdir(parents=True, exist_ok=True)
-right_output_dir.mkdir(parents=True, exist_ok=True)
+
 
 def sync_si_data_with_video():
 
@@ -178,23 +172,6 @@ def select_and_parse_frames():
         results.append({"index": i, "R": R, "t": t, "T": T})
     
     return results
-
-
-        # cap = cv2.VideoCapture(left_video)
-        # cap.set(cv2.CAP_PROP_POS_FRAMES, i)
-        # ret, frame = cap.read()
-        # if not ret:
-        #     print(f"Error reading frame {i} from left video")
-        # cap.release()
-        # cv2.imwrite(left_output_dir / f"frame_{i}_left.jpg", frame)
-
-        # cap = cv2.VideoCapture(right_video)
-        # cap.set(cv2.CAP_PROP_POS_FRAMES, i)
-        # ret, frame = cap.read()
-        # if not ret:
-        #     print(f"Error reading frame {i} from right video")
-        # cap.release()
-        # cv2.imwrite(right_output_dir / f"frame_{i}_right.jpg", frame)
 
 
 def select_and_parse_frames():

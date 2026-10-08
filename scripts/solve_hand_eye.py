@@ -1,4 +1,4 @@
-"""Solve the July 27 SI hand-eye calibration with the existing AX=XB code."""
+"""Solve SI hand-eye calibration with the existing AX=XB code."""
 
 from pathlib import Path
 import sys
@@ -9,7 +9,7 @@ from scipy.io import savemat
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-DATA_DIR = REPO_ROOT / "data" / "si_data_0727"
+DATA_DIR = REPO_ROOT / "data" / "si_data_07"
 IMAGE_DIR = REPO_ROOT / "checkerboard_images" / "si_20260727" / "calibration"
 SAVED_FRAMES = DATA_DIR / "saved_frames.csv"
 SYNCED_TRANSFORMS = DATA_DIR / "hand_eye_calibration_data_METERS.csv"
