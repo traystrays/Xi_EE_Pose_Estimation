@@ -21,8 +21,8 @@ from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-DATA_DIR = REPO_ROOT / "data" / "xi_data_0616"
-IMAGE_DIR = REPO_ROOT / "checkerboard_images" / "xi_20260616" / "hand_eye_calibration"
+DATA_DIR = REPO_ROOT / "data" / "si_data_1020"
+IMAGE_DIR = REPO_ROOT / "checkerboard_images" / "si_20261020" / "hand_eye_calibration"
 CSV_PATH = DATA_DIR / "saved_frames.csv"
 FRAME_TRANSFORMS_CSV = DATA_DIR / "frame_transforms.csv"
 

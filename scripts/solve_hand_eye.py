@@ -9,18 +9,36 @@ from scipy.io import savemat
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-DATA_DIR = REPO_ROOT / "data" / "si_data_07"
-IMAGE_DIR = REPO_ROOT / "checkerboard_images" / "si_20260727" / "calibration"
+DATA_DIR = REPO_ROOT / "data" / "si_data_1020"
+IMAGE_DIR = REPO_ROOT / "checkerboard_images" / "si_20261020" / "calibration"
 SAVED_FRAMES = DATA_DIR / "saved_frames.csv"
 SYNCED_TRANSFORMS = DATA_DIR / "hand_eye_calibration_data_METERS.csv"
 MATCHED_TRANSFORMS = DATA_DIR / "matched_transforms.csv"
 CAMERA_PARAMETERS = DATA_DIR / "camera_parameters.mat"
-OUTPUT_NPZ = DATA_DIR / "hand_eye_0727_python.npz"
+OUTPUT_NPZ = DATA_DIR / "hand_eye_1020_python_1.npz"
+
+print(f"Using data directory: {DATA_DIR}")
+
+
+# CAMERA_MATRIX = np.array(
+#     [
+#         [1.549987410854589e3, 0.0, 9.475736024485624e2],
+#         [0.0, 1.551038702981481e3, 6.681986905075408e2],
+#         [0.0, 0.0, 1.0],
+#     ],
+#     dtype=np.float64,
+# )
+
+# # OpenCV order: k1, k2, p1, p2, k3.
+# DIST_COEFFS = np.array(
+#     [-0.289954027206988, 0.292060933726558, 0.0, 0.0, 0.0],
+#     dtype=np.float64,
+# )
 
 CAMERA_MATRIX = np.array(
     [
-        [1.549987410854589e3, 0.0, 9.475736024485624e2],
-        [0.0, 1.551038702981481e3, 6.681986905075408e2],
+        [1580.6597160812203, 0.0, 993.6383389647222],
+        [0.0, 1582.3660553768693, 593.4610147347427],
         [0.0, 0.0, 1.0],
     ],
     dtype=np.float64,
@@ -28,10 +46,9 @@ CAMERA_MATRIX = np.array(
 
 # OpenCV order: k1, k2, p1, p2, k3.
 DIST_COEFFS = np.array(
-    [-0.289954027206988, 0.292060933726558, 0.0, 0.0, 0.0],
+    [-0.28357122637446786, -0.28357122637446786, -0.006334614947363842, 0.0012504656853484606, 0.39038317041842135],
     dtype=np.float64,
 )
-
 
 def prepare_selected_transforms() -> int:
     """Match the hand-picked frame list to synchronized ECM transforms."""

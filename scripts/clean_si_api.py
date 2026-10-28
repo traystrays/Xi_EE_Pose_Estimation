@@ -8,11 +8,11 @@ import re
 import math 
 
 # Paths
-Si_Data = Path(r"D:\20261005_calib\data_local_part_1_5_10_2026_15_10_10.csv")
-Left_cam_timestamp = Path(r"D:\20261005_calib\video_stream_1_20261005_151006_timestamps.txt")
-Output_Data = Path(r"D:\20261005_calib")
+Si_Data = Path(r"D:\20261020_calib\data_local_part_1_20_10_2026_14_15_11.csv")
+Left_cam_timestamp = Path(r"D:\20261020_calib\video_stream_2_20261020_141543_timestamps.txt")
+Output_Data = Path(r"data\si_data_1020")
 
-left_K_path = Path(r"C:\Users\Tracy\Documents\MATLAB\20261005_si_data\K_left.mat")
+left_K_path = Path(r"C:\Users\Tracy\Documents\MATLAB\20261005_si_data\K_left.mat") # not needed right now
 
 Output_Data.mkdir(parents=True, exist_ok=True)
 
